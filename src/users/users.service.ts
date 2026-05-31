@@ -41,6 +41,6 @@ export class UsersService {
       }),
       this.prisma.user.count({ where: { deletedAt: null } }),
     ]);
-    return { items, total, page, limit };
+    return { items, total };
   }
 }

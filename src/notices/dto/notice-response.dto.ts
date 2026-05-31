@@ -1,5 +1,4 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { PaginatedResponseMeta } from '../../common/dto/paginated-response.dto';
 
 export class NoticeAuthorDto {
   @ApiProperty()
@@ -32,7 +31,10 @@ export class NoticeResponseDto {
   updatedAt!: Date;
 }
 
-export class NoticeListResponseDto extends PaginatedResponseMeta {
+export class NoticeListResponseDto {
+  @ApiProperty({ example: 42 })
+  total!: number;
+
   @ApiProperty({ type: [NoticeResponseDto] })
   items!: NoticeResponseDto[];
 }
