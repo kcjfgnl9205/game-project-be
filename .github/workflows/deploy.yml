@@ -1,0 +1,22 @@
+name: Deploy to Oracle VM
+
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.ORACLE_HOST }}
+          username: ${{ secrets.ORACLE_USER }}
+          key: ${{ secrets.ORACLE_SSH_KEY }}
+          script: |
+            cd ~/game-project-be
+            git pull origin develop
+            docker compose -f docker-compose.prod.yml --env-file .env up -d --build
+            docker image prune -f
