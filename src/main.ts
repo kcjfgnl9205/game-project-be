@@ -10,6 +10,7 @@ async function bootstrap() {
 
   app.set('trust proxy', 1);
   app.use(cookieParser());
+  app.setGlobalPrefix('api');
 
   const allowedOrigins = (process.env.CORS_ORIGINS ?? '')
     .split(',')
