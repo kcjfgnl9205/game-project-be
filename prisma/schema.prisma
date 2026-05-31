@@ -1,0 +1,48 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+model User {
+  id               String       @id @default(uuid())
+  email            String?      @unique
+  passwordHash     String?
+  nickname         String
+  provider         AuthProvider
+  providerId       String?
+  role             UserRole     @default(USER)
+  refreshTokenHash String?
+  notices          Notice[]
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  deletedAt        DateTime?
+}
+
+model Notice {
+  id        String    @id @default(uuid())
+  title     String
+  content   String    @db.Text
+  author    User      @relation(fields: [authorId], references: [id])
+  authorId  String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+}
+
+enum UserRole {
+  ADMIN
+  USER
+}
+
+enum AuthProvider {
+  GOOGLE
+  APPLE
+  KAKAO
+  LOCAL
+}
