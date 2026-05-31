@@ -13,4 +13,4 @@ RUN npm install
 COPY . .
 
 EXPOSE 3000
-CMD ["sh", "-c", "npm install && npx prisma generate && npx prisma db push --accept-data-loss && npm run seed && npm run start:dev"]
+CMD ["sh", "-c", "npm install && npx prisma generate && npx prisma db push --accept-data-loss && npm run start:dev"]

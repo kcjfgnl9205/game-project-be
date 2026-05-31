@@ -35,9 +35,6 @@ services:
       JWT_REFRESH_SECRET: dev-refresh-secret
       JWT_ACCESS_EXPIRES_IN: 15m
       JWT_REFRESH_EXPIRES_IN: 7d
-      ADMIN_EMAIL: admin@example.com
-      ADMIN_PASSWORD: admin1234
-      ADMIN_NICKNAME: admin
     ports:
       - "3000:3000"
     volumes:
@@ -46,7 +43,6 @@ services:
       sh -c "npm install &&
              npx prisma generate &&
              npx prisma db push --accept-data-loss &&
-             npm run seed &&
              npm run start:dev"
 
 volumes:

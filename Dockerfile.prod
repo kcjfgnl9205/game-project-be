@@ -27,4 +27,4 @@ COPY --from=builder --chown=node:node /usr/src/app/prisma.config.ts ./
 
 USER node
 EXPOSE 3000
-CMD ["sh", "-c", "npx prisma migrate deploy && npm run seed && node dist/src/main.js"]
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/src/main.js"]
