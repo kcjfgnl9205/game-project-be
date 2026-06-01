@@ -8,6 +8,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { PaginationQueryDto } from '../common/dto/pagination.dto';
 import { UserListResponseDto, UserResponseDto } from './dto/user-response.dto';
+import { PlayerStatResponseDto } from './dto/player-stat-response.dto';
 
 @ApiBearerAuth()
 @ApiTags('users')
@@ -19,6 +20,14 @@ export class UsersController {
   @ApiOkResponse({ type: UserResponseDto })
   me(@CurrentUser() user: CurrentUserPayload): Promise<UserResponseDto> {
     return this.usersService.findById(user.userId);
+  }
+
+  @Get('me/stats')
+  @ApiOkResponse({ type: PlayerStatResponseDto })
+  myStats(
+    @CurrentUser() user: CurrentUserPayload,
+  ): Promise<PlayerStatResponseDto> {
+    return this.usersService.getMyStats(user.userId);
   }
 
   @UseGuards(RolesGuard)
