@@ -14,7 +14,16 @@ services:
     volumes:
       - db_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-prootpassword"]
+      test:
+        [
+          "CMD",
+          "mysqladmin",
+          "ping",
+          "-h",
+          "localhost",
+          "-uroot",
+          "-prootpassword",
+        ]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -39,6 +48,7 @@ services:
       - "3000:3000"
     volumes:
       - ./:/usr/src/app
+      - /usr/src/app/node_modules
     command: >
       sh -c "npm install &&
              npx prisma generate &&

@@ -56,3 +56,6 @@ pids
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
 /generated/prisma
+
+# 작업 일지 등 로컬 문서 (git 추적 제외)
+docs/
