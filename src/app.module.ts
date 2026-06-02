@@ -8,6 +8,7 @@ import { UsersModule } from './users/users.module';
 import { NoticesModule } from './notices/notices.module';
 import { RoomsModule } from './rooms/rooms.module';
 import { AdminModule } from './admin/admin.module';
+import { SketchPicModule } from './sketch-pic/sketch-pic.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 
 @Module({
@@ -18,6 +19,7 @@ import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
     NoticesModule,
     RoomsModule,
     AdminModule,
+    SketchPicModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: JwtAuthGuard }],
