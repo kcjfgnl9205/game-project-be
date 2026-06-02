@@ -1,13 +1,9 @@
-import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get } from '@nestjs/common';
 import { ApiBearerAuth, ApiOkResponse, ApiTags } from '@nestjs/swagger';
-import { UserRole } from '@prisma/client';
 import { UsersService } from './users.service';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { CurrentUserPayload } from '../auth/decorators/current-user.decorator';
-import { Roles } from '../auth/decorators/roles.decorator';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { PaginationQueryDto } from '../common/dto/pagination.dto';
-import { UserListResponseDto, UserResponseDto } from './dto/user-response.dto';
+import { UserResponseDto } from './dto/user-response.dto';
 import { PlayerStatResponseDto } from './dto/player-stat-response.dto';
 
 @ApiBearerAuth()
@@ -28,21 +24,5 @@ export class UsersController {
     @CurrentUser() user: CurrentUserPayload,
   ): Promise<PlayerStatResponseDto> {
     return this.usersService.getMyStats(user.userId);
-  }
-
-  @UseGuards(RolesGuard)
-  @Roles(UserRole.ADMIN)
-  @Get()
-  @ApiOkResponse({ type: UserListResponseDto })
-  list(@Query() query: PaginationQueryDto): Promise<UserListResponseDto> {
-    return this.usersService.list(query);
-  }
-
-  @UseGuards(RolesGuard)
-  @Roles(UserRole.ADMIN)
-  @Get(':id')
-  @ApiOkResponse({ type: UserResponseDto })
-  findOne(@Param('id') id: string): Promise<UserResponseDto> {
-    return this.usersService.findById(id);
   }
 }
