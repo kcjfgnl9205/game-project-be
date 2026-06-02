@@ -76,5 +76,14 @@ async function bootstrap() {
   });
 
   await app.listen(process.env.PORT ?? 3000);
+
+  // 개발(nest --watch) 재시작 시 이전 프로세스를 즉시 종료해 포트를 바로 해제한다.
+  // socket.io 연결 때문에 graceful shutdown이 지연되면 새 프로세스가
+  // EADDRINUSE로 죽는데, dev에서는 즉시 종료가 안전하다.
+  if (process.env.NODE_ENV !== 'production') {
+    const shutdownNow = () => process.exit(0);
+    process.once('SIGTERM', shutdownNow);
+    process.once('SIGINT', shutdownNow);
+  }
 }
 void bootstrap();

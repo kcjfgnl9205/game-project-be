@@ -17,10 +17,16 @@ export class SketchPicService {
 
   // 방 + 스케치픽 설정 조회 (소켓 입장 시 호스트/타이머 파악용)
   async getRoomContext(roomId: string) {
-    return this.prisma.room.findUnique({
+    console.log('[SketchPicService] getRoomContext called with:', roomId);
+    const result = await this.prisma.room.findUnique({
       where: { id: roomId },
       include: { sketchPicConfig: true },
     });
+    console.log(
+      '[SketchPicService] getRoomContext result:',
+      result ? { id: result.id, gameType: result.gameType } : 'null',
+    );
+    return result;
   }
 
   // 출제어 후보를 랜덤 추출 (이미 쓴 단어 제외). 전체 목록은 절대 노출하지 않음.

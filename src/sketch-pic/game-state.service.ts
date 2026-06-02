@@ -43,6 +43,8 @@ export interface GameState {
 
   turnTimer: NodeJS.Timeout | null;
   selectTimer: NodeJS.Timeout | null;
+  startTimer: NodeJS.Timeout | null;
+  startAt: number | null;
 }
 
 export function identityKey(type: PlayerType, id: string): string {
@@ -87,6 +89,8 @@ export class GameStateService {
         countedMembers: new Set(),
         turnTimer: null,
         selectTimer: null,
+        startTimer: null,
+        startAt: null,
       };
       this.games.set(roomId, game);
     }
@@ -104,8 +108,11 @@ export class GameStateService {
   clearTimers(game: GameState): void {
     if (game.turnTimer) clearTimeout(game.turnTimer);
     if (game.selectTimer) clearTimeout(game.selectTimer);
+    if (game.startTimer) clearTimeout(game.startTimer);
     game.turnTimer = null;
     game.selectTimer = null;
+    game.startTimer = null;
+    game.startAt = null;
   }
 
   // 현재 출제자 다음 순서의 key (순환)
@@ -129,6 +136,12 @@ export class GameStateService {
       hostKey: game.hostKey,
       turnCount: game.turnCount,
       currentDrawerKey: game.currentDrawerKey,
+      endsAt:
+        game.phase === 'DRAWING'
+          ? game.turnStartedAt + game.drawTimeSec * 1000
+          : game.phase === 'LOBBY'
+            ? game.startAt
+            : null,
       players: [...game.players.values()].map((p) => ({
         playerId: p.key,
         type: p.type,

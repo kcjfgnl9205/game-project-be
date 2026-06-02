@@ -39,16 +39,21 @@ services:
     environment:
       DATABASE_URL: mysql://nest:nestpassword@db:3306/game_project
       PORT: 3000
-      CORS_ORIGINS: http://localhost:5173,http://localhost:3001,http://localhost:5174,https://local.puzmu.com:5174
+      CORS_ORIGINS: http://localhost:5173,http://localhost:3001,http://localhost:5174,https://local.puzmu.com:5173,https://local.puzmu.com:5174
       JWT_ACCESS_SECRET: dev-access-secret
       JWT_REFRESH_SECRET: dev-refresh-secret
       JWT_ACCESS_EXPIRES_IN: 15m
       JWT_REFRESH_EXPIRES_IN: 7d
+      # macOS 도커 bind mount는 inotify 이벤트가 전파되지 않아 nest --watch가
+      # 파일 변경을 못 잡는다. polling으로 강제해 코드 변경이 자동 반영되게 한다.
+      CHOKIDAR_USEPOLLING: "true"
     ports:
       - "3000:3000"
     volumes:
       - ./:/usr/src/app
       - /usr/src/app/node_modules
+      # dist를 호스트와 분리(익명 볼륨)해 watch 재시작 시 ENOTEMPTY(rmdir dist) 방지
+      - /usr/src/app/dist
     command: >
       sh -c "npm install &&
              npx prisma generate &&
