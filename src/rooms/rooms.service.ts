@@ -1,6 +1,5 @@
 import {
   BadRequestException,
-  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -165,6 +164,14 @@ export class RoomsService {
     });
     if (!room) throw new NotFoundException('방을 찾을 수 없습니다');
 
+    // 같은 사람의 기존 참가 기록(나간 기록 포함) 조회
+    const existing = await this.findAnyParticipant(id, identity);
+
+    // 이미 활성 참가 중이면 멱등 처리 (재호출/중복 입장 허용)
+    if (existing && existing.leftAt === null) {
+      return this.findOne(id);
+    }
+
     if (room.status !== RoomStatus.WAITING) {
       throw new BadRequestException('게임이 이미 진행 중인 방입니다');
     }
@@ -180,21 +187,30 @@ export class RoomsService {
     const nickname = await this.resolveNickname(identity, dto.nickname);
 
     try {
-      await this.prisma.roomParticipant.create({
-        data: {
-          roomId: id,
-          userId: identity.type === 'user' ? identity.id : null,
-          guestId: identity.type === 'guest' ? identity.id : null,
-          nickname,
-          isHost: false,
-        },
-      });
+      if (existing) {
+        // 나갔던 참가자 재입장 → 기존 행 되살림 (unique 제약 회피)
+        await this.prisma.roomParticipant.update({
+          where: { id: existing.id },
+          data: { leftAt: null, nickname },
+        });
+      } else {
+        await this.prisma.roomParticipant.create({
+          data: {
+            roomId: id,
+            userId: identity.type === 'user' ? identity.id : null,
+            guestId: identity.type === 'guest' ? identity.id : null,
+            nickname,
+            isHost: false,
+          },
+        });
+      }
     } catch (e) {
       if (
         e instanceof Prisma.PrismaClientKnownRequestError &&
         e.code === 'P2002'
       ) {
-        throw new ConflictException('이미 참가 중인 방입니다');
+        // 동시 입장 경쟁 등 → 이미 참가 처리된 것으로 간주
+        return this.findOne(id);
       }
       throw e;
     }
@@ -257,6 +273,18 @@ export class RoomsService {
       where: {
         roomId,
         leftAt: null,
+        ...(identity.type === 'user'
+          ? { userId: identity.id }
+          : { guestId: identity.id }),
+      },
+    });
+  }
+
+  // leftAt 무관하게 같은 사람의 참가 기록을 찾음 (재입장 판단용)
+  private async findAnyParticipant(roomId: string, identity: Identity) {
+    return this.prisma.roomParticipant.findFirst({
+      where: {
+        roomId,
         ...(identity.type === 'user'
           ? { userId: identity.id }
           : { guestId: identity.id }),
