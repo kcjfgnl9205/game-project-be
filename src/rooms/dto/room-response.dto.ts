@@ -38,9 +38,6 @@ export class RoomResponseDto {
   isPrivate!: boolean;
 
   @ApiProperty()
-  rounds!: number;
-
-  @ApiProperty()
   drawTimeSec!: number;
 
   @ApiProperty()

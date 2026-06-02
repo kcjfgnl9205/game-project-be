@@ -34,13 +34,6 @@ export class CreateRoomDto {
   @MaxLength(20)
   password?: string;
 
-  @ApiPropertyOptional({ default: 5, minimum: 1, maximum: 20 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Max(20)
-  rounds?: number;
-
   @ApiPropertyOptional({ default: 60, minimum: 10, maximum: 180 })
   @IsOptional()
   @IsInt()

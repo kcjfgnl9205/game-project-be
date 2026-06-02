@@ -5,9 +5,6 @@ export class PlayerStatResponseDto {
   playCount!: number;
 
   @ApiProperty()
-  winCount!: number;
-
-  @ApiProperty()
   totalScore!: number;
 
   @ApiProperty()

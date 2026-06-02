@@ -53,7 +53,6 @@ export class UsersService {
     if (!stat) {
       return {
         playCount: 0,
-        winCount: 0,
         totalScore: 0,
         drawCount: 0,
         correctCount: 0,
@@ -63,7 +62,6 @@ export class UsersService {
 
     return {
       playCount: stat.playCount,
-      winCount: stat.winCount,
       totalScore: stat.totalScore,
       drawCount: stat.drawCount,
       correctCount: stat.correctCount,

@@ -99,7 +99,6 @@ export class RoomsService {
         hostGuestId: identity.type === 'guest' ? identity.id : null,
         sketchPicConfig: {
           create: {
-            rounds: dto.rounds ?? 5,
             drawTimeSec: dto.drawTimeSec ?? 60,
           },
         },
@@ -129,8 +128,8 @@ export class RoomsService {
     }
 
     const configUpdate =
-      dto.rounds !== undefined || dto.drawTimeSec !== undefined
-        ? { update: { rounds: dto.rounds, drawTimeSec: dto.drawTimeSec } }
+      dto.drawTimeSec !== undefined
+        ? { update: { drawTimeSec: dto.drawTimeSec } }
         : undefined;
 
     await this.prisma.room.update({
@@ -209,16 +208,35 @@ export class RoomsService {
       throw new NotFoundException('참가 중인 방이 아닙니다');
     }
 
-    // 호스트가 나가면 방 자체 삭제 (정책상 단순화)
-    if (participant.isHost) {
+    // 본인 퇴장 처리
+    await this.prisma.roomParticipant.update({
+      where: { id: participant.id },
+      data: { leftAt: new Date(), isHost: false },
+    });
+
+    if (!participant.isHost) return;
+
+    // 호스트가 나가면 다음 참가자(가장 먼저 입장한 사람)에게 위임, 없으면 방 삭제
+    const next = await this.prisma.roomParticipant.findFirst({
+      where: { roomId: id, leftAt: null },
+      orderBy: { joinedAt: 'asc' },
+    });
+
+    if (!next) {
       await this.prisma.room.delete({ where: { id } });
       return;
     }
 
-    await this.prisma.roomParticipant.update({
-      where: { id: participant.id },
-      data: { leftAt: new Date() },
-    });
+    await this.prisma.$transaction([
+      this.prisma.roomParticipant.update({
+        where: { id: next.id },
+        data: { isHost: true },
+      }),
+      this.prisma.room.update({
+        where: { id },
+        data: { hostUserId: next.userId, hostGuestId: next.guestId },
+      }),
+    ]);
   }
 
   // --- helpers ---
@@ -271,7 +289,7 @@ export class RoomsService {
       status: RoomStatus;
       maxPlayers: number;
       isPrivate: boolean;
-      sketchPicConfig: { rounds: number; drawTimeSec: number } | null;
+      sketchPicConfig: { drawTimeSec: number } | null;
       createdAt: Date;
     },
     currentPlayers: number,
@@ -282,7 +300,6 @@ export class RoomsService {
       status: room.status,
       maxPlayers: room.maxPlayers,
       isPrivate: room.isPrivate,
-      rounds: room.sketchPicConfig?.rounds ?? 5,
       drawTimeSec: room.sketchPicConfig?.drawTimeSec ?? 60,
       currentPlayers,
       createdAt: room.createdAt,

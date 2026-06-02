@@ -95,8 +95,7 @@ model RoomParticipant {
 model SketchPicConfig {
   roomId      String @id                                      // Room 1:1 (PK=FK)
   room        Room   @relation(fields: [roomId], references: [id], onDelete: Cascade)
-  rounds      Int    @default(5)                              // 총 라운드 수
-  drawTimeSec Int    @default(60)                             // 라운드별 그림 그리는 시간(초)
+  drawTimeSec Int    @default(60)                             // 턴별 그림 그리는 시간(초)
 }
 
 // 스케치픽 단어 사전
@@ -113,7 +112,6 @@ model SketchPicStat {
   userId       String    @unique                             // 회원 1명당 1 row
   user         User      @relation(fields: [userId], references: [id])
   playCount    Int       @default(0)                         // 플레이한 게임 수
-  winCount     Int       @default(0)                         // 우승한 횟수
   totalScore   Int       @default(0)                         // 누적 점수
   drawCount    Int       @default(0)                         // 그림을 그린 횟수
   correctCount Int       @default(0)                         // 정답을 맞힌 횟수

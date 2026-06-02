@@ -35,13 +35,6 @@ export class UpdateRoomDto {
   @MaxLength(20)
   password?: string;
 
-  @ApiPropertyOptional({ minimum: 1, maximum: 20 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Max(20)
-  rounds?: number;
-
   @ApiPropertyOptional({ minimum: 10, maximum: 180 })
   @IsOptional()
   @IsInt()
