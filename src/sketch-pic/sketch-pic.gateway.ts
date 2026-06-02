@@ -10,6 +10,8 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { RoomStatus, UserRole } from '@prisma/client';
 import type { Server, Socket } from 'socket.io';
+import { RoomsService } from '../rooms/rooms.service';
+import type { Identity } from '../auth/decorators/identity.decorator';
 import {
   GameState,
   GameStateService,
@@ -46,6 +48,7 @@ export class SketchPicGateway
   constructor(
     private readonly gameState: GameStateService,
     private readonly service: SketchPicService,
+    private readonly rooms: RoomsService,
     private readonly jwt: JwtService,
   ) {}
 
@@ -116,6 +119,12 @@ export class SketchPicGateway
     const wasHost = state.hostKey === data.key;
     state.players.delete(data.key);
     state.turnOrder = state.turnOrder.filter((k) => k !== data.key);
+
+    // DB 참가자 정리 (REST leave와 동일: 호스트 위임 / 빈 방 삭제).
+    // REST join 없이 소켓만 붙은 경우 참가 기록이 없어 NotFound → 무시.
+    void this.rooms
+      .leave(data.roomId, this.toIdentity(player))
+      .catch(() => undefined);
 
     if (state.players.size === 0) {
       this.gameState.delete(data.roomId);
@@ -244,6 +253,7 @@ export class SketchPicGateway
       senderId: key,
       nickname: player.nickname,
       text,
+      ts: Date.now(),
     });
   }
 
@@ -421,6 +431,12 @@ export class SketchPicGateway
       return { type: 'guest', id: auth.guestId };
     }
     throw new Error('인증 정보(token 또는 guestId)가 필요합니다');
+  }
+
+  private toIdentity(player: Player): Identity {
+    return player.type === 'user'
+      ? { type: 'user', id: player.id, role: UserRole.USER }
+      : { type: 'guest', id: player.id };
   }
 
   private stateOf(client: Socket): GameState | undefined {
