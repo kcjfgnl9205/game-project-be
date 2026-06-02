@@ -16,7 +16,7 @@ import {
 } from './dto/word-response.dto';
 
 @Injectable()
-export class AdminWordsService {
+export class SketchPicWordsService {
   constructor(private prisma: PrismaService) {}
 
   async list({
@@ -25,19 +25,19 @@ export class AdminWordsService {
   }: PaginationQueryDto): Promise<WordListResponseDto> {
     const skip = (page - 1) * limit;
     const [items, total] = await this.prisma.$transaction([
-      this.prisma.gameWord.findMany({
+      this.prisma.sketchPicWord.findMany({
         skip,
         take: limit,
         orderBy: { createdAt: 'desc' },
       }),
-      this.prisma.gameWord.count(),
+      this.prisma.sketchPicWord.count(),
     ]);
     return { total, items };
   }
 
   async create(dto: CreateWordDto): Promise<WordResponseDto> {
     try {
-      return await this.prisma.gameWord.create({
+      return await this.prisma.sketchPicWord.create({
         data: { word: dto.word.trim() },
       });
     } catch (e) {
@@ -56,7 +56,7 @@ export class AdminWordsService {
       new Set(dto.words.map((w) => w.trim()).filter(Boolean)),
     );
 
-    const result = await this.prisma.gameWord.createMany({
+    const result = await this.prisma.sketchPicWord.createMany({
       data: unique.map((word) => ({ word })),
       skipDuplicates: true,
     });
@@ -70,7 +70,7 @@ export class AdminWordsService {
   async update(id: string, dto: UpdateWordDto): Promise<WordResponseDto> {
     await this.ensureExists(id);
     try {
-      return await this.prisma.gameWord.update({
+      return await this.prisma.sketchPicWord.update({
         where: { id },
         data: { word: dto.word.trim() },
       });
@@ -87,11 +87,11 @@ export class AdminWordsService {
 
   async remove(id: string): Promise<void> {
     await this.ensureExists(id);
-    await this.prisma.gameWord.delete({ where: { id } });
+    await this.prisma.sketchPicWord.delete({ where: { id } });
   }
 
   private async ensureExists(id: string): Promise<void> {
-    const word = await this.prisma.gameWord.findUnique({
+    const word = await this.prisma.sketchPicWord.findUnique({
       where: { id },
       select: { id: true },
     });

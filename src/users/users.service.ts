@@ -46,7 +46,7 @@ export class UsersService {
   }
 
   async getMyStats(userId: string): Promise<PlayerStatResponseDto> {
-    const stat = await this.prisma.playerStat.findUnique({
+    const stat = await this.prisma.sketchPicStat.findUnique({
       where: { userId },
     });
 

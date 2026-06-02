@@ -1,9 +1,9 @@
 import { Module } from '@nestjs/common';
-import { AdminWordsController } from './words/admin-words.controller';
-import { AdminWordsService } from './words/admin-words.service';
+import { SketchPicWordsController } from './sketch-pic-words/sketch-pic-words.controller';
+import { SketchPicWordsService } from './sketch-pic-words/sketch-pic-words.service';
 
 @Module({
-  controllers: [AdminWordsController],
-  providers: [AdminWordsService],
+  controllers: [SketchPicWordsController],
+  providers: [SketchPicWordsService],
 })
 export class AdminModule {}

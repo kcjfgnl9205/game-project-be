@@ -6,7 +6,7 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { Prisma, RoomStatus } from '@prisma/client';
+import { GameType, Prisma, RoomStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type { Identity } from '../auth/decorators/identity.decorator';
 import { PaginationQueryDto } from '../common/dto/pagination.dto';
@@ -28,15 +28,22 @@ export class RoomsService {
     limit,
   }: PaginationQueryDto): Promise<RoomListResponseDto> {
     const skip = (page - 1) * limit;
+    const where = {
+      gameType: GameType.SKETCH_PIC,
+      status: RoomStatus.WAITING,
+    };
     const [rooms, total] = await this.prisma.$transaction([
       this.prisma.room.findMany({
-        where: { status: RoomStatus.WAITING },
+        where,
         skip,
         take: limit,
         orderBy: { createdAt: 'desc' },
-        include: { _count: { select: { participants: true } } },
+        include: {
+          sketchPicConfig: true,
+          _count: { select: { participants: true } },
+        },
       }),
-      this.prisma.room.count({ where: { status: RoomStatus.WAITING } }),
+      this.prisma.room.count({ where }),
     ]);
 
     return {
@@ -49,6 +56,7 @@ export class RoomsService {
     const room = await this.prisma.room.findUnique({
       where: { id },
       include: {
+        sketchPicConfig: true,
         participants: {
           where: { leftAt: null },
           orderBy: { joinedAt: 'asc' },
@@ -82,14 +90,19 @@ export class RoomsService {
 
     const room = await this.prisma.room.create({
       data: {
+        gameType: GameType.SKETCH_PIC,
         name: dto.name,
         maxPlayers: dto.maxPlayers ?? 4,
         isPrivate: dto.isPrivate ?? false,
         password: dto.isPrivate ? dto.password : null,
-        rounds: dto.rounds ?? 5,
-        drawTimeSec: dto.drawTimeSec ?? 60,
         hostUserId: identity.type === 'user' ? identity.id : null,
         hostGuestId: identity.type === 'guest' ? identity.id : null,
+        sketchPicConfig: {
+          create: {
+            rounds: dto.rounds ?? 5,
+            drawTimeSec: dto.drawTimeSec ?? 60,
+          },
+        },
         participants: {
           create: {
             userId: identity.type === 'user' ? identity.id : null,
@@ -98,9 +111,6 @@ export class RoomsService {
             isHost: true,
           },
         },
-      },
-      include: {
-        participants: { where: { leftAt: null } },
       },
     });
 
@@ -118,6 +128,11 @@ export class RoomsService {
       throw new BadRequestException('비공개 방은 비밀번호가 필요합니다');
     }
 
+    const configUpdate =
+      dto.rounds !== undefined || dto.drawTimeSec !== undefined
+        ? { update: { rounds: dto.rounds, drawTimeSec: dto.drawTimeSec } }
+        : undefined;
+
     await this.prisma.room.update({
       where: { id },
       data: {
@@ -128,8 +143,7 @@ export class RoomsService {
           dto.isPrivate === false
             ? null
             : (dto.password ?? undefined),
-        rounds: dto.rounds,
-        drawTimeSec: dto.drawTimeSec,
+        sketchPicConfig: configUpdate,
       },
     });
 
@@ -257,8 +271,7 @@ export class RoomsService {
       status: RoomStatus;
       maxPlayers: number;
       isPrivate: boolean;
-      rounds: number;
-      drawTimeSec: number;
+      sketchPicConfig: { rounds: number; drawTimeSec: number } | null;
       createdAt: Date;
     },
     currentPlayers: number,
@@ -269,8 +282,8 @@ export class RoomsService {
       status: room.status,
       maxPlayers: room.maxPlayers,
       isPrivate: room.isPrivate,
-      rounds: room.rounds,
-      drawTimeSec: room.drawTimeSec,
+      rounds: room.sketchPicConfig?.rounds ?? 5,
+      drawTimeSec: room.sketchPicConfig?.drawTimeSec ?? 60,
       currentPlayers,
       createdAt: room.createdAt,
     };

@@ -18,7 +18,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
-import { AdminWordsService } from './admin-words.service';
+import { SketchPicWordsService } from './sketch-pic-words.service';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { PaginationQueryDto } from '../../common/dto/pagination.dto';
@@ -32,12 +32,12 @@ import {
 } from './dto/word-response.dto';
 
 @ApiBearerAuth()
-@ApiTags('admin/words')
+@ApiTags('admin/sketch-pic/words')
 @UseGuards(RolesGuard)
 @Roles(UserRole.ADMIN)
-@Controller('admin/words')
-export class AdminWordsController {
-  constructor(private words: AdminWordsService) {}
+@Controller('admin/sketch-pic/words')
+export class SketchPicWordsController {
+  constructor(private words: SketchPicWordsService) {}
 
   @Get()
   @ApiOkResponse({ type: WordListResponseDto })

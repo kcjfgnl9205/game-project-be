@@ -24,7 +24,7 @@ model User {
   notices          Notice[]                                 // 작성한 공지사항
   hostedRooms      Room[]            @relation("HostedRooms") // 호스트로 만든 방들
   participants     RoomParticipant[]                        // 참가한 방 기록
-  stat             PlayerStat?                              // 게임 통계 (회원 1:1)
+  sketchPicStat    SketchPicStat?                           // 스케치픽 통계 (회원 1:1)
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
   deletedAt        DateTime?                                // soft delete 시점
@@ -45,28 +45,28 @@ model Notice {
 }
 
 // ==========================================
-// 스케치픽
+// 게임 공통 (방 / 참가자)
 // ==========================================
 
-// 게임 방 (캐치마인드 1개당 1 row, 끝나면 삭제)
+// 게임 방 (모든 게임 공통, 게임 종류는 gameType으로 구분)
 model Room {
-  id           String            @id @default(uuid())        // 방 ID
-  name         String            @db.VarChar(50)             // 방 이름 (사용자 표시용)
-  status       RoomStatus        @default(WAITING)           // WAITING(대기) / IN_GAME(진행)
-  maxPlayers   Int               @default(4)                 // 최대 참가 인원
-  isPrivate    Boolean           @default(false)             // 비공개 방 여부 (비번 필요)
-  password     String?           @db.VarChar(20)             // 비공개 방 비밀번호 (평문, 짧음)
-  rounds       Int               @default(5)                 // 총 라운드 수
-  drawTimeSec  Int               @default(60)                // 라운드별 그림 그리는 시간(초)
-  hostUserId   String?                                       // 호스트가 회원이면 User.id
-  hostGuestId  String?                                       // 호스트가 게스트면 게스트 UUID
-  host         User?             @relation("HostedRooms", fields: [hostUserId], references: [id])
-  participants RoomParticipant[]                             // 참가자 목록
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
+  id              String            @id @default(uuid())        // 방 ID
+  gameType        GameType                                      // 어떤 게임의 방인지 (SKETCH_PIC 등)
+  name            String            @db.VarChar(50)             // 방 이름 (사용자 표시용)
+  status          RoomStatus        @default(WAITING)           // WAITING(대기) / IN_GAME(진행)
+  maxPlayers      Int               @default(4)                 // 최대 참가 인원
+  isPrivate       Boolean           @default(false)             // 비공개 방 여부 (비번 필요)
+  password        String?           @db.VarChar(20)             // 비공개 방 비밀번호 (평문, 짧음)
+  hostUserId      String?                                       // 호스트가 회원이면 User.id
+  hostGuestId     String?                                       // 호스트가 게스트면 게스트 UUID
+  host            User?             @relation("HostedRooms", fields: [hostUserId], references: [id])
+  participants    RoomParticipant[]                             // 참가자 목록
+  sketchPicConfig SketchPicConfig?                              // 스케치픽 방이면 설정 (gameType=SKETCH_PIC)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
 
-  @@index([status])                                          // 대기방 목록 조회용
-  @@index([createdAt])                                       // 최신순 정렬용
+  @@index([gameType, status])                                   // 게임별 대기방 목록 조회용
+  @@index([createdAt])                                          // 최신순 정렬용
 }
 
 // 방 참가자 (회원/게스트 모두)
@@ -87,16 +87,28 @@ model RoomParticipant {
   @@index([roomId])                                          // 방별 참가자 조회용
 }
 
-// 캐치마인드 단어 사전
-model GameWord {
-  id        String   @id @default(uuid())                    // 단어 ID
-  word      String   @unique @db.VarChar(30)                 // 단어 (중복 불가)
+// ==========================================
+// 스케치픽 전용
+// ==========================================
+
+// 스케치픽 방 설정 (Room 1:1, gameType=SKETCH_PIC 일 때만 존재)
+model SketchPicConfig {
+  roomId      String @id                                      // Room 1:1 (PK=FK)
+  room        Room   @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  rounds      Int    @default(5)                              // 총 라운드 수
+  drawTimeSec Int    @default(60)                             // 라운드별 그림 그리는 시간(초)
+}
+
+// 스케치픽 단어 사전
+model SketchPicWord {
+  id        String   @id @default(uuid())                     // 단어 ID
+  word      String   @unique @db.VarChar(30)                  // 단어 (중복 불가)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
-// 회원별 누적 통계 (게스트는 통계 없음)
-model PlayerStat {
+// 스케치픽 회원별 누적 통계 (게스트는 통계 없음)
+model SketchPicStat {
   id           String    @id @default(uuid())                // 통계 row ID
   userId       String    @unique                             // 회원 1명당 1 row
   user         User      @relation(fields: [userId], references: [id])
@@ -112,6 +124,11 @@ model PlayerStat {
 // ==========================================
 // Enum
 // ==========================================
+
+// 게임 종류 (방이 어떤 게임인지 구분)
+enum GameType {
+  SKETCH_PIC    // 스케치픽 (그림 맞히기)
+}
 
 // 게임 방 상태
 enum RoomStatus {
