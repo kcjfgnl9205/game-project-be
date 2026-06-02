@@ -106,7 +106,7 @@ export class SketchPicGateway
     }
   }
 
-  handleDisconnect(client: Socket): void {
+  async handleDisconnect(client: Socket): Promise<void> {
     const data = client.data as SocketData | undefined;
     if (!data?.roomId) return;
     const state = this.gameState.get(data.roomId);
@@ -122,7 +122,7 @@ export class SketchPicGateway
 
     // DB 참가자 정리 (REST leave와 동일: 호스트 위임 / 빈 방 삭제).
     // REST join 없이 소켓만 붙은 경우 참가 기록이 없어 NotFound → 무시.
-    void this.rooms
+    await this.rooms
       .leave(data.roomId, this.toIdentity(player))
       .catch(() => undefined);
 
