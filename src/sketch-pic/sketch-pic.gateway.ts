@@ -118,6 +118,7 @@ export class SketchPicGateway
         nickname: (auth.nickname ?? '').trim() || '플레이어',
         socketId: client.id,
       };
+      const isReconnect = state.players.has(key); // 이미 있던 참가자면 재연결
       state.players.set(key, player);
       if (!state.turnOrder.includes(key)) state.turnOrder.push(key); // 진행 중이면 다음 턴부터 참여
 
@@ -130,6 +131,9 @@ export class SketchPicGateway
         await this.service.incrementPlayCount(id).catch(() => undefined);
       }
 
+      if (!isReconnect) {
+        this.emitSystemChat(state, `${player.nickname}님이 입장했습니다.`);
+      }
       this.emitLobby(state);
       if (state.phase === 'LOBBY' && state.players.size >= 2) {
         this.scheduleStart(state);
@@ -156,6 +160,11 @@ export class SketchPicGateway
     const wasHost = state.hostKey === data.key;
     state.players.delete(data.key);
     state.turnOrder = state.turnOrder.filter((k) => k !== data.key);
+
+    // 남은 사람이 있으면 퇴장 안내
+    if (state.players.size > 0) {
+      this.emitSystemChat(state, `${player.nickname}님이 나갔습니다.`);
+    }
 
     // DB 참가자 정리 (호스트 위임 / 빈 방 삭제)는 유예 후 실행한다.
     // 일시적 단절(새로고침·재시작·네트워크)로 방이 즉시 삭제되는 것을 막고,
@@ -387,10 +396,6 @@ export class SketchPicGateway
     if (drawer) {
       this.server.to(drawer.socketId).emit('turn:word', { word: choice.word });
     }
-    this.emitSystemChat(
-      state,
-      `${drawer?.nickname ?? '출제자'}님이 그림을 시작합니다.`,
-    );
 
     state.turnTimer = setTimeout(
       () => void this.endTurn(state, 'timeout'),
@@ -406,10 +411,7 @@ export class SketchPicGateway
     const gain = base + bonus;
 
     state.solved.add(player.key);
-    this.gameState.addScore(state, player.key, gain);
-    if (state.currentDrawerKey) {
-      this.gameState.addScore(state, state.currentDrawerKey, 25); // 출제자 보상
-    }
+    this.gameState.addScore(state, player.key, gain); // 맞힌 사람만 가점 (출제자 보너스 없음)
 
     this.server.to(state.roomId).emit('guess:correct', {
       playerId: player.key,
