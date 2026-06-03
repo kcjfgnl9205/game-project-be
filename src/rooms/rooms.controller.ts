@@ -19,7 +19,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { RoomsService } from './rooms.service';
-import { PaginationQueryDto } from '../common/dto/pagination.dto';
+import { RoomListQueryDto } from './dto/room-list-query.dto';
 import { Public } from '../auth/decorators/public.decorator';
 import { IdentityGuard } from '../auth/guards/identity.guard';
 import {
@@ -42,7 +42,7 @@ export class RoomsController {
   @Public()
   @Get()
   @ApiOkResponse({ type: RoomListResponseDto })
-  list(@Query() query: PaginationQueryDto): Promise<RoomListResponseDto> {
+  list(@Query() query: RoomListQueryDto): Promise<RoomListResponseDto> {
     return this.rooms.list(query);
   }
 

@@ -8,7 +8,7 @@ import {
 import { GameType, Prisma, RoomStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type { Identity } from '../auth/decorators/identity.decorator';
-import { PaginationQueryDto } from '../common/dto/pagination.dto';
+import { RoomListQueryDto } from './dto/room-list-query.dto';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { UpdateRoomDto } from './dto/update-room.dto';
 import { JoinRoomDto } from './dto/join-room.dto';
@@ -25,21 +25,27 @@ export class RoomsService {
   async list({
     page,
     limit,
-  }: PaginationQueryDto): Promise<RoomListResponseDto> {
+    q,
+  }: RoomListQueryDto): Promise<RoomListResponseDto> {
     const skip = (page - 1) * limit;
-    const where = {
+    // 게임 중(IN_GAME) 방도 목록에 노출한다. (정원 여유 시 중간 입장 허용)
+    // q가 있으면 방 이름 부분 일치로 검색한다.
+    const keyword = q?.trim();
+    const where: Prisma.RoomWhereInput = {
       gameType: GameType.SKETCH_PIC,
-      status: RoomStatus.WAITING,
+      ...(keyword ? { name: { contains: keyword } } : {}),
     };
     const [rooms, total] = await this.prisma.$transaction([
       this.prisma.room.findMany({
         where,
         skip,
         take: limit,
-        orderBy: { createdAt: 'desc' },
+        // 입장 가능한 대기 방을 위로, 그 안에서 최신순.
+        orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
         include: {
           sketchPicConfig: true,
-          _count: { select: { participants: true } },
+          // 나간 사람(leftAt != null)은 제외하고 현재 인원만 센다.
+          _count: { select: { participants: { where: { leftAt: null } } } },
         },
       }),
       this.prisma.room.count({ where }),
@@ -172,10 +178,7 @@ export class RoomsService {
       return this.findOne(id);
     }
 
-    if (room.status !== RoomStatus.WAITING) {
-      throw new BadRequestException('게임이 이미 진행 중인 방입니다');
-    }
-
+    // 게임 중(IN_GAME)이어도 정원만 남으면 입장 허용 (다음 턴부터 참여).
     if (room._count.participants >= room.maxPlayers) {
       throw new BadRequestException('정원이 가득 찼습니다');
     }
