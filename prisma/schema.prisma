@@ -13,35 +13,35 @@ datasource db {
 // 사용자
 // ==========================================
 model User {
-  id               String            @id @default(uuid())   // 사용자 고유 ID (UUID)
-  email            String?           @unique                // 이메일 (소셜 로그인 시 없을 수 있음)
-  passwordHash     String?                                  // bcrypt 해시된 비밀번호 (LOCAL만)
-  nickname         String                                   // 표시 닉네임
-  provider         AuthProvider                             // 가입 경로 (LOCAL, GOOGLE 등)
-  providerId       String?                                  // 소셜 로그인 시 외부 ID
-  role             UserRole          @default(USER)         // 권한 (ADMIN/USER)
-  refreshTokenHash String?                                  // 리프레시 토큰 해시 (로그아웃 시 null)
-  notices          Notice[]                                 // 작성한 공지사항
+  id               String            @id @default(uuid()) // 사용자 고유 ID (UUID)
+  email            String?           @unique // 이메일 (소셜 로그인 시 없을 수 있음)
+  passwordHash     String? // bcrypt 해시된 비밀번호 (LOCAL만)
+  nickname         String // 표시 닉네임
+  provider         AuthProvider // 가입 경로 (LOCAL, GOOGLE 등)
+  providerId       String? // 소셜 로그인 시 외부 ID
+  role             UserRole          @default(USER) // 권한 (ADMIN/USER)
+  refreshTokenHash String? // 리프레시 토큰 해시 (로그아웃 시 null)
+  notices          Notice[] // 작성한 공지사항
   hostedRooms      Room[]            @relation("HostedRooms") // 호스트로 만든 방들
-  participants     RoomParticipant[]                        // 참가한 방 기록
-  sketchPicStat    SketchPicStat?                           // 스케치픽 통계 (회원 1:1)
+  participants     RoomParticipant[] // 참가한 방 기록
+  sketchPicStat    SketchPicStat? // 스케치픽 통계 (회원 1:1)
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
-  deletedAt        DateTime?                                // soft delete 시점
+  deletedAt        DateTime? // soft delete 시점
 }
 
 // ==========================================
 // 공지사항
 // ==========================================
 model Notice {
-  id        String    @id @default(uuid())                   // 공지사항 ID
-  title     String                                           // 제목
-  content   String    @db.Text                               // 본문 (긴 텍스트)
+  id        String    @id @default(uuid()) // 공지사항 ID
+  title     String // 제목
+  content   String    @db.Text // 본문 (긴 텍스트)
   author    User      @relation(fields: [authorId], references: [id])
-  authorId  String                                           // 작성자 (관리자) ID
+  authorId  String // 작성자 (관리자) ID
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
-  deletedAt DateTime?                                        // soft delete 시점
+  deletedAt DateTime? // soft delete 시점
 }
 
 // ==========================================
@@ -50,41 +50,42 @@ model Notice {
 
 // 게임 방 (모든 게임 공통, 게임 종류는 gameType으로 구분)
 model Room {
-  id              String            @id @default(uuid())        // 방 ID
-  gameType        GameType                                      // 어떤 게임의 방인지 (SKETCH_PIC 등)
-  name            String            @db.VarChar(50)             // 방 이름 (사용자 표시용)
-  status          RoomStatus        @default(WAITING)           // WAITING(대기) / IN_GAME(진행)
-  maxPlayers      Int               @default(4)                 // 최대 참가 인원
-  isPrivate       Boolean           @default(false)             // 비공개 방 여부 (비번 필요)
-  password        String?           @db.VarChar(20)             // 비공개 방 비밀번호 (평문, 짧음)
-  hostUserId      String?                                       // 호스트가 회원이면 User.id
-  hostGuestId     String?                                       // 호스트가 게스트면 게스트 UUID
+  id              String            @id @default(uuid()) // 방 ID
+  gameType        GameType // 어떤 게임의 방인지 (SKETCH_PIC 등)
+  name            String            @db.VarChar(50) // 방 이름 (사용자 표시용)
+  status          RoomStatus        @default(WAITING) // WAITING(대기) / IN_GAME(진행)
+  maxPlayers      Int               @default(4) // 최대 참가 인원
+  isPrivate       Boolean           @default(false) // 비공개 방 여부 (비번 필요)
+  password        String?           @db.VarChar(20) // 비공개 방 비밀번호 (평문, 짧음)
+  hostUserId      String? // 호스트가 회원이면 User.id
+  hostGuestId     String? // 호스트가 게스트면 게스트 UUID
   host            User?             @relation("HostedRooms", fields: [hostUserId], references: [id])
-  participants    RoomParticipant[]                             // 참가자 목록
-  sketchPicConfig SketchPicConfig?                              // 스케치픽 방이면 설정 (gameType=SKETCH_PIC)
+  participants    RoomParticipant[] // 참가자 목록
+  sketchPicConfig SketchPicConfig? // 스케치픽 방이면 설정 (gameType=SKETCH_PIC)
+  whoDrewConfig   WhoDrewConfig? // 누가그렸지 방이면 설정 (gameType=WHO_DREW)
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
 
-  @@index([gameType, status])                                   // 게임별 대기방 목록 조회용
-  @@index([createdAt])                                          // 최신순 정렬용
+  @@index([gameType, status]) // 게임별 대기방 목록 조회용
+  @@index([createdAt]) // 최신순 정렬용
 }
 
 // 방 참가자 (회원/게스트 모두)
 model RoomParticipant {
-  id        String    @id @default(uuid())                   // 참가 기록 ID
-  roomId    String                                           // 어느 방인지
-  room      Room      @relation(fields: [roomId], references: [id], onDelete: Cascade)
-  userId    String?                                          // 회원이면 User.id (게스트면 null)
-  user      User?     @relation(fields: [userId], references: [id])
-  guestId   String?   @db.VarChar(36)                        // 게스트면 UUID (회원이면 null)
-  nickname  String    @db.VarChar(20)                        // 방 안에서 표시될 이름
-  isHost    Boolean   @default(false)                        // 호스트 여부 (방장)
-  joinedAt  DateTime  @default(now())                        // 입장 시각
-  leftAt    DateTime?                                        // 퇴장 시각 (null이면 아직 참가 중)
+  id       String    @id @default(uuid()) // 참가 기록 ID
+  roomId   String // 어느 방인지
+  room     Room      @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  userId   String? // 회원이면 User.id (게스트면 null)
+  user     User?     @relation(fields: [userId], references: [id])
+  guestId  String?   @db.VarChar(36) // 게스트면 UUID (회원이면 null)
+  nickname String    @db.VarChar(20) // 방 안에서 표시될 이름
+  isHost   Boolean   @default(false) // 호스트 여부 (방장)
+  joinedAt DateTime  @default(now()) // 입장 시각
+  leftAt   DateTime? // 퇴장 시각 (null이면 아직 참가 중)
 
-  @@unique([roomId, userId])                                 // 같은 방에 같은 회원 중복 불가
-  @@unique([roomId, guestId])                                // 같은 방에 같은 게스트 중복 불가
-  @@index([roomId])                                          // 방별 참가자 조회용
+  @@unique([roomId, userId]) // 같은 방에 같은 회원 중복 불가
+  @@unique([roomId, guestId]) // 같은 방에 같은 게스트 중복 불가
+  @@index([roomId]) // 방별 참가자 조회용
 }
 
 // ==========================================
@@ -93,30 +94,54 @@ model RoomParticipant {
 
 // 스케치픽 방 설정 (Room 1:1, gameType=SKETCH_PIC 일 때만 존재)
 model SketchPicConfig {
-  roomId      String @id                                      // Room 1:1 (PK=FK)
+  roomId      String @id // Room 1:1 (PK=FK)
   room        Room   @relation(fields: [roomId], references: [id], onDelete: Cascade)
-  drawTimeSec Int    @default(60)                             // 턴별 그림 그리는 시간(초)
+  drawTimeSec Int    @default(60) // 턴별 그림 그리는 시간(초)
 }
 
 // 스케치픽 단어 사전
 model SketchPicWord {
-  id        String   @id @default(uuid())                     // 단어 ID
-  word      String   @unique @db.VarChar(30)                  // 단어 (중복 불가)
+  id        String   @id @default(uuid()) // 단어 ID
+  word      String   @unique @db.VarChar(30) // 단어 (중복 불가)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
 // 스케치픽 회원별 누적 통계 (게스트는 통계 없음)
 model SketchPicStat {
-  id           String    @id @default(uuid())                // 통계 row ID
-  userId       String    @unique                             // 회원 1명당 1 row
+  id           String    @id @default(uuid()) // 통계 row ID
+  userId       String    @unique // 회원 1명당 1 row
   user         User      @relation(fields: [userId], references: [id])
-  playCount    Int       @default(0)                         // 플레이한 게임 수
-  totalScore   Int       @default(0)                         // 누적 점수
-  drawCount    Int       @default(0)                         // 그림을 그린 횟수
-  correctCount Int       @default(0)                         // 정답을 맞힌 횟수
-  lastPlayedAt DateTime?                                     // 마지막 플레이 시각
+  playCount    Int       @default(0) // 플레이한 게임 수
+  totalScore   Int       @default(0) // 누적 점수
+  drawCount    Int       @default(0) // 그림을 그린 횟수
+  correctCount Int       @default(0) // 정답을 맞힌 횟수
+  lastPlayedAt DateTime? // 마지막 플레이 시각
   updatedAt    DateTime  @updatedAt
+}
+
+// ==========================================
+// 누가그렸지 전용 (그림 마피아)
+// ==========================================
+
+// 누가그렸지 방 설정 (Room 1:1, gameType=WHO_DREW 일 때만 존재)
+model WhoDrewConfig {
+  roomId       String  @id // Room 1:1 (PK=FK)
+  room         Room    @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  rounds       Int     @default(5) // 각 플레이어가 그리는 횟수(차례 수), 4~8
+  turnTimeSec  Int     @default(20) // 한 획당 제한 시간(초)
+  allowMidVote Boolean @default(true) // 게임 중 의심 투표 허용 여부
+}
+
+// 누가그렸지 단어 쌍 사전 — 일반인 단어 / 마피아 단어(헷갈리는 관련어)
+model WhoDrewWordPair {
+  id           String   @id @default(uuid()) // 단어쌍 ID
+  civilianWord String   @db.VarChar(30) // 일반인이 받는 단어 (예: 사자)
+  mafiaWord    String   @db.VarChar(30) // 마피아가 받는 단어 (예: 호랑이)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([civilianWord, mafiaWord]) // 같은 쌍 중복 방지
 }
 
 // ==========================================
@@ -125,25 +150,26 @@ model SketchPicStat {
 
 // 게임 종류 (방이 어떤 게임인지 구분)
 enum GameType {
-  SKETCH_PIC    // 스케치픽 (그림 맞히기)
+  SKETCH_PIC // 스케치픽 (그림 맞히기)
+  WHO_DREW // 누가그렸지 (그림 마피아)
 }
 
 // 게임 방 상태
 enum RoomStatus {
-  WAITING       // 입장 대기 중 (게임 끝난 후에도 이 상태로 돌아옴)
-  IN_GAME       // 게임 진행 중
+  WAITING // 입장 대기 중 (게임 끝난 후에도 이 상태로 돌아옴)
+  IN_GAME // 게임 진행 중
 }
 
 // 사용자 권한
 enum UserRole {
-  ADMIN         // 관리자
-  USER          // 일반 사용자
+  ADMIN // 관리자
+  USER // 일반 사용자
 }
 
 // 가입 경로
 enum AuthProvider {
-  GOOGLE        // 구글 로그인
-  APPLE         // 애플 로그인
-  KAKAO         // 카카오 로그인
-  LOCAL         // 이메일/비밀번호 로그인
+  GOOGLE // 구글 로그인
+  APPLE // 애플 로그인
+  KAKAO // 카카오 로그인
+  LOCAL // 이메일/비밀번호 로그인
 }
