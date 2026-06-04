@@ -17,6 +17,12 @@ import {
   RoomListResponseDto,
   RoomResponseDto,
 } from './dto/room-response.dto';
+import {
+  allConfigIncludes,
+  getGameHandler,
+  parseGameConfig,
+} from './game-configs';
+import type { RoomWithConfigs } from './game-configs/game-config.handler';
 
 @Injectable()
 export class RoomsService {
@@ -45,7 +51,7 @@ export class RoomsService {
         // 입장 가능한 대기 방을 위로, 그 안에서 최신순.
         orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
         include: {
-          sketchPicConfig: true,
+          ...allConfigIncludes(),
           // 나간 사람(leftAt != null)은 제외하고 현재 인원만 센다.
           _count: { select: { participants: { where: { leftAt: null } } } },
         },
@@ -63,7 +69,7 @@ export class RoomsService {
     const room = await this.prisma.room.findUnique({
       where: { id },
       include: {
-        sketchPicConfig: true,
+        ...allConfigIncludes(),
         participants: {
           where: { leftAt: null },
           orderBy: { joinedAt: 'asc' },
@@ -95,20 +101,21 @@ export class RoomsService {
       throw new BadRequestException('비공개 방은 비밀번호가 필요합니다');
     }
 
+    const gameType = dto.gameType ?? GameType.SKETCH_PIC;
+    // 게임별 핸들러가 config 검증 + nested create를 책임진다. (코어는 게임에 무지)
+    const handler = getGameHandler(gameType);
+    const config = parseGameConfig(handler.configDto, dto.config);
+
     const room = await this.prisma.room.create({
       data: {
-        gameType: GameType.SKETCH_PIC,
+        gameType,
         name: dto.name,
         maxPlayers: dto.maxPlayers ?? 4,
         isPrivate: dto.isPrivate ?? false,
         password: dto.isPrivate ? dto.password : null,
         hostUserId: identity.type === 'user' ? identity.id : null,
         hostGuestId: identity.type === 'guest' ? identity.id : null,
-        sketchPicConfig: {
-          create: {
-            drawTimeSec: dto.drawTimeSec ?? 60,
-          },
-        },
+        ...handler.buildCreate(config),
         participants: {
           create: {
             userId: identity.type === 'user' ? identity.id : null,
@@ -128,16 +135,15 @@ export class RoomsService {
     identity: Identity,
     dto: UpdateRoomDto,
   ): Promise<RoomDetailResponseDto> {
-    await this.assertHost(id, identity);
+    const room = await this.assertHost(id, identity);
 
     if (dto.isPrivate && dto.password === '') {
       throw new BadRequestException('비공개 방은 비밀번호가 필요합니다');
     }
 
-    const configUpdate =
-      dto.drawTimeSec !== undefined
-        ? { update: { drawTimeSec: dto.drawTimeSec } }
-        : undefined;
+    // 게임별 핸들러가 config 검증 + nested update를 책임진다.
+    const handler = getGameHandler(room.gameType);
+    const config = parseGameConfig(handler.configDto, dto.config ?? {});
 
     await this.prisma.room.update({
       where: { id },
@@ -146,7 +152,7 @@ export class RoomsService {
         maxPlayers: dto.maxPlayers,
         isPrivate: dto.isPrivate,
         password: dto.isPrivate === false ? null : (dto.password ?? undefined),
-        sketchPicConfig: configUpdate,
+        ...handler.buildUpdate(config),
       },
     });
 
@@ -270,6 +276,7 @@ export class RoomsService {
       (identity.type === 'guest' && room.hostGuestId === identity.id);
 
     if (!isHost) throw new ForbiddenException('호스트만 가능합니다');
+    return room;
   }
 
   private async findParticipant(roomId: string, identity: Identity) {
@@ -321,9 +328,9 @@ export class RoomsService {
       status: RoomStatus;
       maxPlayers: number;
       isPrivate: boolean;
-      sketchPicConfig: { drawTimeSec: number } | null;
+      gameType: GameType;
       createdAt: Date;
-    },
+    } & RoomWithConfigs,
     currentPlayers: number,
   ): RoomResponseDto {
     return {
@@ -332,7 +339,9 @@ export class RoomsService {
       status: room.status,
       maxPlayers: room.maxPlayers,
       isPrivate: room.isPrivate,
-      drawTimeSec: room.sketchPicConfig?.drawTimeSec ?? 60,
+      gameType: room.gameType,
+      // 게임별 config 매핑은 핸들러가 담당 (코어는 게임 설정 형태를 모름)
+      config: getGameHandler(room.gameType).toResponseConfig(room),
       currentPlayers,
       createdAt: room.createdAt,
     };

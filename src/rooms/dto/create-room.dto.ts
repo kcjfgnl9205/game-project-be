@@ -1,7 +1,9 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsBoolean,
+  IsEnum,
   IsInt,
+  IsObject,
   IsOptional,
   IsString,
   Length,
@@ -9,8 +11,17 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+import { GameType } from '@prisma/client';
 
 export class CreateRoomDto {
+  @ApiPropertyOptional({
+    enum: GameType,
+    description: '게임 종류 (미지정 시 SKETCH_PIC)',
+  })
+  @IsOptional()
+  @IsEnum(GameType)
+  gameType?: GameType;
+
   @ApiProperty({ example: '재밌게 한 판', maxLength: 50 })
   @IsString()
   @Length(1, 50)
@@ -34,12 +45,14 @@ export class CreateRoomDto {
   @MaxLength(20)
   password?: string;
 
-  @ApiPropertyOptional({ default: 60, minimum: 10, maximum: 180 })
+  @ApiPropertyOptional({
+    type: Object,
+    description:
+      '게임별 설정 (예: SKETCH_PIC {drawTimeSec}, WHO_DREW {rounds,turnTimeSec,allowMidVote})',
+  })
   @IsOptional()
-  @IsInt()
-  @Min(10)
-  @Max(180)
-  drawTimeSec?: number;
+  @IsObject()
+  config?: Record<string, unknown>;
 
   @ApiPropertyOptional({ description: '게스트 닉네임 (게스트면 필수)' })
   @IsOptional()

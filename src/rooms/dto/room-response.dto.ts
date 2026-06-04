@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { RoomStatus } from '@prisma/client';
+import { GameType, RoomStatus } from '@prisma/client';
 
 export class RoomParticipantDto {
   @ApiProperty()
@@ -37,8 +37,15 @@ export class RoomResponseDto {
   @ApiProperty()
   isPrivate!: boolean;
 
-  @ApiProperty()
-  drawTimeSec!: number;
+  @ApiProperty({ enum: GameType })
+  gameType!: GameType;
+
+  @ApiProperty({
+    type: Object,
+    description:
+      '게임별 설정 (예: {drawTimeSec} 또는 {rounds,turnTimeSec,allowMidVote})',
+  })
+  config!: Record<string, unknown>;
 
   @ApiProperty()
   currentPlayers!: number;

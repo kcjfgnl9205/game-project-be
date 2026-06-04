@@ -22,10 +22,7 @@ import { RoomsService } from './rooms.service';
 import { RoomListQueryDto } from './dto/room-list-query.dto';
 import { Public } from '../auth/decorators/public.decorator';
 import { IdentityGuard } from '../auth/guards/identity.guard';
-import {
-  GetIdentity,
-  Identity,
-} from '../auth/decorators/identity.decorator';
+import { GetIdentity, Identity } from '../auth/decorators/identity.decorator';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { UpdateRoomDto } from './dto/update-room.dto';
 import { JoinRoomDto } from './dto/join-room.dto';

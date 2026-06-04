@@ -2,6 +2,7 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsBoolean,
   IsInt,
+  IsObject,
   IsOptional,
   IsString,
   Length,
@@ -35,10 +36,8 @@ export class UpdateRoomDto {
   @MaxLength(20)
   password?: string;
 
-  @ApiPropertyOptional({ minimum: 10, maximum: 180 })
+  @ApiPropertyOptional({ type: Object, description: '게임별 설정 (부분 수정)' })
   @IsOptional()
-  @IsInt()
-  @Min(10)
-  @Max(180)
-  drawTimeSec?: number;
+  @IsObject()
+  config?: Record<string, unknown>;
 }
