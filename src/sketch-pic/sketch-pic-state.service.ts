@@ -20,7 +20,7 @@ export interface WordChoice {
 }
 
 // 한 방의 진행 중 게임 상태 (서버 재시작 시 소실되는 ephemeral 데이터)
-export interface GameState {
+export interface SketchPicState {
   roomId: string;
   phase: Phase;
   hostKey: string | null;
@@ -56,10 +56,10 @@ export function identityKey(type: PlayerType, id: string): string {
  * 소켓/DB IO는 하지 않는다 — 순수 상태 보관 + 전이 헬퍼만.
  */
 @Injectable()
-export class GameStateService {
-  private readonly games = new Map<string, GameState>();
+export class SketchPicStateService {
+  private readonly games = new Map<string, SketchPicState>();
 
-  get(roomId: string): GameState | undefined {
+  get(roomId: string): SketchPicState | undefined {
     return this.games.get(roomId);
   }
 
@@ -67,7 +67,7 @@ export class GameStateService {
     roomId: string,
     drawTimeSec: number,
     hostKey: string | null,
-  ): GameState {
+  ): SketchPicState {
     let game = this.games.get(roomId);
     if (!game) {
       game = {
@@ -105,7 +105,7 @@ export class GameStateService {
     }
   }
 
-  clearTimers(game: GameState): void {
+  clearTimers(game: SketchPicState): void {
     if (game.turnTimer) clearTimeout(game.turnTimer);
     if (game.selectTimer) clearTimeout(game.selectTimer);
     if (game.startTimer) clearTimeout(game.startTimer);
@@ -116,7 +116,7 @@ export class GameStateService {
   }
 
   // 현재 출제자 다음 순서의 key (순환)
-  nextDrawerKey(game: GameState): string | null {
+  nextDrawerKey(game: SketchPicState): string | null {
     const order = game.turnOrder;
     if (order.length === 0) return null;
     if (!game.currentDrawerKey) return order[0];
@@ -124,13 +124,13 @@ export class GameStateService {
     return order[(idx + 1) % order.length];
   }
 
-  addScore(game: GameState, key: string, amount: number): void {
+  addScore(game: SketchPicState, key: string, amount: number): void {
     game.turnScores.set(key, (game.turnScores.get(key) ?? 0) + amount);
     game.sessionScores.set(key, (game.sessionScores.get(key) ?? 0) + amount);
   }
 
   // 로비/점수판 스냅샷 (클라 브로드캐스트용)
-  lobbySnapshot(game: GameState) {
+  lobbySnapshot(game: SketchPicState) {
     return {
       status: game.phase,
       hostKey: game.hostKey,
@@ -152,7 +152,7 @@ export class GameStateService {
     };
   }
 
-  scoreboard(game: GameState) {
+  scoreboard(game: SketchPicState) {
     return [...game.players.values()]
       .map((p) => ({
         playerId: p.key,

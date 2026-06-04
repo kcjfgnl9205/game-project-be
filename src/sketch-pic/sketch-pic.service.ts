@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma, RoomStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import type { WordChoice } from './game-state.service';
+import type { WordChoice } from './sketch-pic-state.service';
 
 // 게임 종료 후(턴 단위) 통계 증분 항목 (회원만)
 export interface TurnStatEntry {

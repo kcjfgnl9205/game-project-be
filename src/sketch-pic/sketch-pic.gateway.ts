@@ -13,13 +13,13 @@ import type { Server, Socket } from 'socket.io';
 import { RoomsService } from '../rooms/rooms.service';
 import type { Identity } from '../auth/decorators/identity.decorator';
 import {
-  GameState,
-  GameStateService,
+  SketchPicState,
+  SketchPicStateService,
   identityKey,
   Player,
   PlayerType,
   WordChoice,
-} from './game-state.service';
+} from './sketch-pic-state.service';
 import { SketchPicService, TurnStatEntry } from './sketch-pic.service';
 
 const SELECT_TIMEOUT_MS = 10_000; // 출제어 미선택 시 자동 선택
@@ -54,7 +54,7 @@ export class SketchPicGateway
   private readonly leaveTimers = new Map<string, NodeJS.Timeout>();
 
   constructor(
-    private readonly gameState: GameStateService,
+    private readonly gameState: SketchPicStateService,
     private readonly service: SketchPicService,
     private readonly rooms: RoomsService,
     private readonly jwt: JwtService,
@@ -308,7 +308,7 @@ export class SketchPicGateway
 
   // ===== 게임 흐름 =====
 
-  private async startGame(state: GameState): Promise<void> {
+  private async startGame(state: SketchPicState): Promise<void> {
     console.debug('[sketch-pic] startGame:', state.roomId);
     this.gameState.clearTimers(state);
     state.turnOrder = [...state.players.keys()];
@@ -323,7 +323,7 @@ export class SketchPicGateway
     await this.beginTurn(state);
   }
 
-  private async beginTurn(state: GameState): Promise<void> {
+  private async beginTurn(state: SketchPicState): Promise<void> {
     console.debug(
       '[sketch-pic] beginTurn:',
       state.roomId,
@@ -373,7 +373,7 @@ export class SketchPicGateway
     }, SELECT_TIMEOUT_MS);
   }
 
-  private startDrawing(state: GameState, choice: WordChoice): void {
+  private startDrawing(state: SketchPicState, choice: WordChoice): void {
     this.gameState.clearTimers(state);
     state.usedWordIds.add(choice.id);
     state.word = choice.word;
@@ -403,7 +403,7 @@ export class SketchPicGateway
     );
   }
 
-  private handleCorrect(state: GameState, player: Player): void {
+  private handleCorrect(state: SketchPicState, player: Player): void {
     const order = state.solved.size; // 앞서 맞힌 사람 수
     const elapsedSec = (Date.now() - state.turnStartedAt) / 1000;
     const base = Math.max(10, Math.round(100 - elapsedSec * 2));
@@ -423,7 +423,7 @@ export class SketchPicGateway
     void this.endTurn(state, 'correct');
   }
 
-  private async endTurn(state: GameState, reason: string): Promise<void> {
+  private async endTurn(state: SketchPicState, reason: string): Promise<void> {
     if (state.phase === 'REVEAL') return; // 중복 방지
     console.debug('[sketch-pic] endTurn:', state.roomId, 'reason=', reason);
     this.gameState.clearTimers(state);
@@ -468,7 +468,7 @@ export class SketchPicGateway
     void this.beginTurn(state);
   }
 
-  private async stopGame(state: GameState, reason: string): Promise<void> {
+  private async stopGame(state: SketchPicState, reason: string): Promise<void> {
     this.gameState.clearTimers(state);
     state.phase = 'LOBBY';
     state.currentDrawerKey = null;
@@ -529,7 +529,7 @@ export class SketchPicGateway
     }
   }
 
-  private stateOf(client: Socket): GameState | undefined {
+  private stateOf(client: Socket): SketchPicState | undefined {
     const data = client.data as SocketData | undefined;
     return data?.roomId ? this.gameState.get(data.roomId) : undefined;
   }
@@ -538,14 +538,14 @@ export class SketchPicGateway
     return (client.data as SocketData).key;
   }
 
-  private emitLobby(state: GameState): void {
+  private emitLobby(state: SketchPicState): void {
     this.server
       .to(state.roomId)
       .emit('lobby:state', this.gameState.lobbySnapshot(state));
   }
 
   // 진행 안내(그림 시작/정답/정답 공개)를 채팅 로그에 시스템 메시지로 남긴다.
-  private emitSystemChat(state: GameState, text: string): void {
+  private emitSystemChat(state: SketchPicState, text: string): void {
     this.server.to(state.roomId).emit('chat:system', { text, ts: Date.now() });
   }
 
@@ -553,7 +553,7 @@ export class SketchPicGateway
     client.emit('error', { code, message });
   }
 
-  private scheduleStart(state: GameState): void {
+  private scheduleStart(state: SketchPicState): void {
     if (state.startTimer) return;
     state.startAt = Date.now() + START_DELAY_MS;
     this.server
