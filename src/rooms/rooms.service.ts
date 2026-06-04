@@ -26,13 +26,15 @@ export class RoomsService {
     page,
     limit,
     q,
+    gameType,
   }: RoomListQueryDto): Promise<RoomListResponseDto> {
     const skip = (page - 1) * limit;
     // 게임 중(IN_GAME) 방도 목록에 노출한다. (정원 여유 시 중간 입장 허용)
+    // gameType으로 게임별 방만 보여준다. (미지정 시 SKETCH_PIC)
     // q가 있으면 방 이름 부분 일치로 검색한다.
     const keyword = q?.trim();
     const where: Prisma.RoomWhereInput = {
-      gameType: GameType.SKETCH_PIC,
+      gameType: gameType ?? GameType.SKETCH_PIC,
       ...(keyword ? { name: { contains: keyword } } : {}),
     };
     const [rooms, total] = await this.prisma.$transaction([
@@ -143,10 +145,7 @@ export class RoomsService {
         name: dto.name,
         maxPlayers: dto.maxPlayers,
         isPrivate: dto.isPrivate,
-        password:
-          dto.isPrivate === false
-            ? null
-            : (dto.password ?? undefined),
+        password: dto.isPrivate === false ? null : (dto.password ?? undefined),
         sketchPicConfig: configUpdate,
       },
     });
@@ -166,7 +165,9 @@ export class RoomsService {
   ): Promise<RoomDetailResponseDto> {
     const room = await this.prisma.room.findUnique({
       where: { id },
-      include: { _count: { select: { participants: { where: { leftAt: null } } } } },
+      include: {
+        _count: { select: { participants: { where: { leftAt: null } } } },
+      },
     });
     if (!room) throw new NotFoundException('방을 찾을 수 없습니다');
 
