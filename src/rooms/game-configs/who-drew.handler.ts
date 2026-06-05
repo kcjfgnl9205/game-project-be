@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsInt, IsOptional, Max, Min } from 'class-validator';
+import { IsInt, IsOptional, Max, Min } from 'class-validator';
 import { GameType } from '@prisma/client';
 import type { GameConfigHandler } from './game-config.handler';
 
@@ -27,11 +27,6 @@ export class WhoDrewConfigDto {
   @Min(10)
   @Max(60)
   turnTimeSec?: number;
-
-  @ApiPropertyOptional({ default: true, description: '게임 중 의심 투표 허용' })
-  @IsOptional()
-  @IsBoolean()
-  allowMidVote?: boolean;
 }
 
 export const whoDrewHandler: GameConfigHandler<WhoDrewConfigDto> = {
@@ -43,7 +38,6 @@ export const whoDrewHandler: GameConfigHandler<WhoDrewConfigDto> = {
       create: {
         rounds: c.rounds ?? 5,
         turnTimeSec: c.turnTimeSec ?? 20,
-        allowMidVote: c.allowMidVote ?? true,
       },
     },
   }),
@@ -51,13 +45,11 @@ export const whoDrewHandler: GameConfigHandler<WhoDrewConfigDto> = {
     const data = {
       ...(c.rounds !== undefined ? { rounds: c.rounds } : {}),
       ...(c.turnTimeSec !== undefined ? { turnTimeSec: c.turnTimeSec } : {}),
-      ...(c.allowMidVote !== undefined ? { allowMidVote: c.allowMidVote } : {}),
     };
     return Object.keys(data).length ? { whoDrewConfig: { update: data } } : {};
   },
   toResponseConfig: (room) => ({
     rounds: room.whoDrewConfig?.rounds ?? 5,
     turnTimeSec: room.whoDrewConfig?.turnTimeSec ?? 20,
-    allowMidVote: room.whoDrewConfig?.allowMidVote ?? true,
   }),
 };

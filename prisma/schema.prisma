@@ -126,11 +126,10 @@ model SketchPicStat {
 
 // 누가그렸지 방 설정 (Room 1:1, gameType=WHO_DREW 일 때만 존재)
 model WhoDrewConfig {
-  roomId       String  @id // Room 1:1 (PK=FK)
-  room         Room    @relation(fields: [roomId], references: [id], onDelete: Cascade)
-  rounds       Int     @default(5) // 각 플레이어가 그리는 횟수(차례 수), 4~8
-  turnTimeSec  Int     @default(20) // 한 획당 제한 시간(초)
-  allowMidVote Boolean @default(true) // 게임 중 의심 투표 허용 여부
+  roomId      String @id // Room 1:1 (PK=FK)
+  room        Room   @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  rounds      Int    @default(5) // 각 플레이어가 그리는 횟수(차례 수), 4~8
+  turnTimeSec Int    @default(20) // 한 획당 제한 시간(초)
 }
 
 // 누가그렸지 단어 쌍 사전 — 일반인 단어 / 마피아 단어(헷갈리는 관련어)

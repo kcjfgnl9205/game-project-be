@@ -9,7 +9,6 @@ export type RoomWithConfigs = {
   whoDrewConfig: {
     rounds: number;
     turnTimeSec: number;
-    allowMidVote: boolean;
   } | null;
 };
 
