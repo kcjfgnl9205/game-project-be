@@ -144,8 +144,45 @@ model WhoDrewWordPair {
 }
 
 // ==========================================
+// 문의 / 건의 (1:1 문의)
+// ==========================================
+
+// 문의 카테고리 (관리자가 DB에서 관리, 사용자 문의 모달에서 선택)
+model InquiryCategory {
+  id        String    @id @default(uuid()) // 카테고리 ID
+  name      String    @unique @db.VarChar(50) // 카테고리명 (버그 제보, 건의사항 등)
+  sortOrder Int       @default(0) // 노출 순서 (오름차순)
+  inquiries Inquiry[] // 이 카테고리로 들어온 문의들
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+// 문의 / 건의 내역 (메일 발송은 운영자가 수동 처리)
+model Inquiry {
+  id         String          @id @default(uuid()) // 문의 ID
+  categoryId String // 문의 카테고리 ID
+  category   InquiryCategory @relation(fields: [categoryId], references: [id]) // 삭제는 기본 Restrict (문의가 있으면 카테고리 삭제 불가)
+  email      String          @db.VarChar(255) // 회신받을 이메일
+  title      String          @db.VarChar(100) // 제목
+  content    String          @db.Text // 내용 (긴 텍스트)
+  status     InquiryStatus   @default(PENDING) // 처리 상태
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  @@index([status]) // 상태별 조회용
+  @@index([categoryId]) // 카테고리별 조회용
+  @@index([createdAt]) // 최신순 정렬용
+}
+
+// ==========================================
 // Enum
 // ==========================================
+
+// 문의 처리 상태
+enum InquiryStatus {
+  PENDING // 미처리
+  DONE // 처리완료
+}
 
 // 게임 종류 (방이 어떤 게임인지 구분)
 enum GameType {
