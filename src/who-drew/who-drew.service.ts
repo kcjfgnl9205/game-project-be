@@ -11,7 +11,7 @@ export interface WordPair {
 export class WhoDrewService {
   constructor(private prisma: PrismaService) {}
 
-  // 방 + 누가그렸지 설정 조회 (소켓 입장 시 호스트/설정 파악용)
+  // 방 + 그림 마피아 설정 조회 (소켓 입장 시 호스트/설정 파악용)
   async getRoomContext(roomId: string) {
     return this.prisma.room.findUnique({
       where: { id: roomId },

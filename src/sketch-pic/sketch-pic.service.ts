@@ -15,7 +15,7 @@ export interface TurnStatEntry {
 export class SketchPicService {
   constructor(private prisma: PrismaService) {}
 
-  // 방 + 스케치픽 설정 조회 (소켓 입장 시 호스트/타이머 파악용)
+  // 방 + 그림 맞추기 설정 조회 (소켓 입장 시 호스트/타이머 파악용)
   async getRoomContext(roomId: string) {
     console.log('[SketchPicService] getRoomContext called with:', roomId);
     const result = await this.prisma.room.findUnique({
