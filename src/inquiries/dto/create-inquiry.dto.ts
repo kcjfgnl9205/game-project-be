@@ -1,5 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsString, IsUUID, Length } from 'class-validator';
+import {
+  Equals,
+  IsBoolean,
+  IsEmail,
+  IsString,
+  IsUUID,
+  Length,
+} from 'class-validator';
 
 export class CreateInquiryDto {
   @ApiProperty({ description: '회신받을 이메일', example: 'user@example.com' })
@@ -30,4 +37,12 @@ export class CreateInquiryDto {
   @IsString()
   @Length(1, 2000)
   content!: string;
+
+  @ApiProperty({
+    description: '개인정보 수집·이용 동의 (필수, true여야 함)',
+    example: true,
+  })
+  @IsBoolean()
+  @Equals(true, { message: '개인정보 수집·이용에 동의해야 합니다' })
+  privacyConsent!: boolean;
 }

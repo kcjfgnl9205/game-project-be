@@ -47,8 +47,11 @@ export class InquiryResponseDto {
   @ApiProperty({ type: InquiryCategorySummaryDto })
   category!: InquiryCategorySummaryDto;
 
-  @ApiProperty({ description: '회신받을 이메일' })
-  email!: string;
+  @ApiProperty({
+    description: '회신받을 이메일 (보관기간 경과 시 null)',
+    nullable: true,
+  })
+  email!: string | null;
 
   @ApiProperty({ description: '제목' })
   title!: string;
@@ -58,6 +61,20 @@ export class InquiryResponseDto {
 
   @ApiProperty({ enum: InquiryStatus, description: '처리 상태' })
   status!: InquiryStatus;
+
+  @ApiProperty({
+    type: String,
+    format: 'date-time',
+    nullable: true,
+    description: '처리 완료 시각 (보관기간 기준)',
+  })
+  processedAt!: Date | null;
+
+  @ApiProperty({ description: '개인정보 수집·이용 동의 여부' })
+  privacyConsent!: boolean;
+
+  @ApiProperty({ type: String, format: 'date-time', nullable: true })
+  privacyConsentAt!: Date | null;
 
   @ApiProperty({ type: String, format: 'date-time' })
   createdAt!: Date;
@@ -72,4 +89,9 @@ export class InquiryListResponseDto {
 
   @ApiProperty({ type: [InquiryResponseDto] })
   items!: InquiryResponseDto[];
+}
+
+export class EmailPurgeResultDto {
+  @ApiProperty({ description: 'null 처리된 문의 수' })
+  affected!: number;
 }

@@ -7,6 +7,7 @@ import {
   HttpStatus,
   Param,
   Patch,
+  Post,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -21,6 +22,7 @@ import { InquiriesService } from '../../inquiries/inquiries.service';
 import { InquiryListQueryDto } from '../../inquiries/dto/inquiry-list-query.dto';
 import { UpdateInquiryDto } from '../../inquiries/dto/update-inquiry.dto';
 import {
+  EmailPurgeResultDto,
   InquiryListResponseDto,
   InquiryResponseDto,
 } from '../../inquiries/dto/inquiry-response.dto';
@@ -39,6 +41,13 @@ export class AdminInquiriesController {
   @ApiOkResponse({ type: InquiryListResponseDto })
   list(@Query() query: InquiryListQueryDto): Promise<InquiryListResponseDto> {
     return this.inquiries.list(query);
+  }
+
+  // 처리 완료 후 1년 지난 문의 이메일 일괄 null 처리 (보관기간 만료)
+  @Post('purge-emails')
+  @ApiOkResponse({ type: EmailPurgeResultDto })
+  purgeEmails(): Promise<EmailPurgeResultDto> {
+    return this.inquiries.purgeExpiredEmails();
   }
 
   @Get(':id')

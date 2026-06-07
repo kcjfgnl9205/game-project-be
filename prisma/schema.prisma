@@ -159,15 +159,18 @@ model InquiryCategory {
 
 // 문의 / 건의 내역 (메일 발송은 운영자가 수동 처리)
 model Inquiry {
-  id         String          @id @default(uuid()) // 문의 ID
-  categoryId String // 문의 카테고리 ID
-  category   InquiryCategory @relation(fields: [categoryId], references: [id]) // 삭제는 기본 Restrict (문의가 있으면 카테고리 삭제 불가)
-  email      String          @db.VarChar(255) // 회신받을 이메일
-  title      String          @db.VarChar(100) // 제목
-  content    String          @db.Text // 내용 (긴 텍스트)
-  status     InquiryStatus   @default(PENDING) // 처리 상태
-  createdAt  DateTime        @default(now())
-  updatedAt  DateTime        @updatedAt
+  id               String          @id @default(uuid()) // 문의 ID
+  categoryId       String // 문의 카테고리 ID
+  category         InquiryCategory @relation(fields: [categoryId], references: [id]) // 삭제는 기본 Restrict (문의가 있으면 카테고리 삭제 불가)
+  email            String?         @db.VarChar(255) // 회신받을 이메일 (보관기간 경과 시 null)
+  title            String          @db.VarChar(100) // 제목
+  content          String          @db.Text // 내용 (긴 텍스트)
+  status           InquiryStatus   @default(PENDING) // 처리 상태
+  processedAt      DateTime? // 처리 완료(DONE) 시각 — 보관기간(1년) 기준
+  privacyConsent   Boolean         @default(false) // 개인정보 수집·이용 동의 여부 (필수)
+  privacyConsentAt DateTime? // 동의 시각
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
 
   @@index([status]) // 상태별 조회용
   @@index([categoryId]) // 카테고리별 조회용
