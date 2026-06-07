@@ -1,208 +1,121 @@
 import {
   ConnectedSocket,
   MessageBody,
-  OnGatewayConnection,
-  OnGatewayDisconnect,
   SubscribeMessage,
   WebSocketGateway,
-  WebSocketServer,
 } from '@nestjs/websockets';
 import { JwtService } from '@nestjs/jwt';
-import { RoomStatus, UserRole } from '@prisma/client';
-import type { Server, Socket } from 'socket.io';
+import { RoomStatus } from '@prisma/client';
+import type { Socket } from 'socket.io';
 import { RoomsService } from '../rooms/rooms.service';
-import type { Identity } from '../auth/decorators/identity.decorator';
+import {
+  BaseGameGateway,
+  identityKey,
+  type BasePlayer,
+} from '../game-common/base-game.gateway';
 import {
   SketchPicState,
   SketchPicStateService,
-  identityKey,
   Player,
-  PlayerType,
   WordChoice,
 } from './sketch-pic-state.service';
 import { SketchPicService, TurnStatEntry } from './sketch-pic.service';
 
 const SELECT_TIMEOUT_MS = 10_000; // 출제어 미선택 시 자동 선택
-const START_DELAY_MS = 2_000; // 2명 이상 입장 시 자동 시작 대기
-const MAX_CHAT_LEN = 200;
-// 소켓 끊김 후 DB 참가자 정리(빈 방 삭제)까지의 유예 시간.
-// 새로고침·네트워크 끊김·dev 서버 재시작 등 일시적 단절에서 방이 사라지지 않도록
-// 지연시킨다. 재접속하면 취소된다. (재시작 시엔 타이머가 프로세스와 함께 사라져
-// rooms.leave가 실행되지 않으므로 방이 보존된다.)
-const LEAVE_GRACE_MS = 30_000;
-
-interface SocketData {
-  roomId: string;
-  key: string;
-}
-
-interface JwtPayload {
-  sub: string;
-  role: UserRole;
-}
 
 @WebSocketGateway({
   namespace: '/sketch-pic',
   cors: { origin: true, credentials: true }, // TODO(prod): CORS_ORIGINS로 제한
 })
-export class SketchPicGateway
-  implements OnGatewayConnection, OnGatewayDisconnect
-{
-  @WebSocketServer() server!: Server;
-
-  // `${roomId}:${key}` -> 유예 중인 DB leave 타이머. 재접속 시 취소한다.
-  private readonly leaveTimers = new Map<string, NodeJS.Timeout>();
-
+export class SketchPicGateway extends BaseGameGateway<SketchPicState> {
   constructor(
     private readonly gameState: SketchPicStateService,
     private readonly service: SketchPicService,
-    private readonly rooms: RoomsService,
-    private readonly jwt: JwtService,
-  ) {}
+    rooms: RoomsService,
+    jwt: JwtService,
+  ) {
+    super(rooms, jwt);
+  }
 
-  // ===== 연결 / 해제 =====
+  // ===== 베이스 추상 구현 =====
 
-  async handleConnection(client: Socket): Promise<void> {
-    try {
-      const auth = (client.handshake.auth ?? {}) as Record<string, string>;
-      const roomId = auth.roomId;
-      console.log('[SketchPicGateway] handleConnection:', {
-        roomId,
-        authKeys: Object.keys(auth),
-      });
-      if (!roomId) throw new Error('roomId가 필요합니다');
+  protected async loadState(roomId: string): Promise<SketchPicState> {
+    let room = await this.service.getRoomContext(roomId);
+    for (let i = 0; i < 3 && !room; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      room = await this.service.getRoomContext(roomId);
+    }
+    if (!room) throw new Error('방을 찾을 수 없습니다');
 
-      const { type, id } = this.resolveIdentity(auth);
-      console.log('[SketchPicGateway] resolveIdentity:', { type, id });
+    const hostKey = room.hostUserId
+      ? identityKey('user', room.hostUserId)
+      : room.hostGuestId
+        ? identityKey('guest', room.hostGuestId)
+        : null;
 
-      // 방 생성 후 DB 동기화 대기 (재시도)
-      let room = await this.service.getRoomContext(roomId);
-      if (!room) {
-        console.log(
-          '[SketchPicGateway] room not found on first try, retrying...',
-        );
-        // 재시도: 최대 3회, 100ms 간격
-        for (let i = 0; i < 3 && !room; i++) {
-          await new Promise((r) => setTimeout(r, 100));
-          room = await this.service.getRoomContext(roomId);
-          console.log(
-            `[SketchPicGateway] retry ${i + 1}:`,
-            room ? 'found' : 'not found',
-          );
-        }
-      }
-      if (!room) throw new Error('방을 찾을 수 없습니다');
-      console.log('[SketchPicGateway] room found:', {
-        id: room.id,
-        gameType: room.gameType,
-      });
+    return this.gameState.getOrCreate(
+      roomId,
+      room.sketchPicConfig?.drawTimeSec ?? 60,
+      hostKey,
+    );
+  }
 
-      const hostKey = room.hostUserId
-        ? identityKey('user', room.hostUserId)
-        : room.hostGuestId
-          ? identityKey('guest', room.hostGuestId)
-          : null;
+  protected getState(roomId: string): SketchPicState | undefined {
+    return this.gameState.get(roomId);
+  }
 
-      const state = this.gameState.getOrCreate(
-        roomId,
-        room.sketchPicConfig?.drawTimeSec ?? 60,
-        hostKey,
-      );
+  protected deleteState(roomId: string): void {
+    this.gameState.delete(roomId);
+  }
 
-      const key = identityKey(type, id);
-      this.cancelLeave(roomId, key); // 유예 중이던 퇴장 정리 취소 (재접속)
-      const player: Player = {
-        key,
-        type,
-        id,
-        nickname: (auth.nickname ?? '').trim() || '플레이어',
-        socketId: client.id,
-      };
-      const isReconnect = state.players.has(key); // 이미 있던 참가자면 재연결
-      state.players.set(key, player);
-      if (!state.turnOrder.includes(key)) state.turnOrder.push(key); // 진행 중이면 다음 턴부터 참여
+  protected snapshot(state: SketchPicState): unknown {
+    return this.gameState.lobbySnapshot(state);
+  }
 
-      (client.data as SocketData) = { roomId, key };
-      await client.join(roomId);
-
-      // 회원 최초 입장 시 playCount +1
-      if (type === 'user' && !state.countedMembers.has(key)) {
-        state.countedMembers.add(key);
-        await this.service.incrementPlayCount(id).catch(() => undefined);
-      }
-
-      if (!isReconnect) {
-        this.emitSystemChat(state, `${player.nickname}님이 입장했습니다.`);
-      }
-      this.emitLobby(state);
-      if (state.phase === 'LOBBY' && state.players.size >= 2) {
-        this.scheduleStart(state);
-      }
-    } catch (e) {
-      client.emit('error', {
-        code: 'CONNECT_FAILED',
-        message: e instanceof Error ? e.message : '연결 실패',
-      });
-      client.disconnect(true);
+  // 참가자 등록: 턴 순서 추가 + 회원 최초 입장 시 playCount +1
+  protected onPlayerAdded(state: SketchPicState, player: BasePlayer): void {
+    if (!state.turnOrder.includes(player.key)) state.turnOrder.push(player.key);
+    if (player.type === 'user' && !state.countedMembers.has(player.key)) {
+      state.countedMembers.add(player.key);
+      void this.service.incrementPlayCount(player.id).catch(() => undefined);
     }
   }
 
-  async handleDisconnect(client: Socket): Promise<void> {
-    const data = client.data as SocketData | undefined;
-    if (!data?.roomId) return;
-    const state = this.gameState.get(data.roomId);
-    if (!state) return;
-
-    const player = state.players.get(data.key);
-    if (!player || player.socketId !== client.id) return; // 재연결로 교체된 stale 소켓
-
-    const wasDrawer = state.currentDrawerKey === data.key;
-    const wasHost = state.hostKey === data.key;
-    state.players.delete(data.key);
-    state.turnOrder = state.turnOrder.filter((k) => k !== data.key);
-
-    // 남은 사람이 있으면 퇴장 안내
-    if (state.players.size > 0) {
-      this.emitSystemChat(state, `${player.nickname}님이 나갔습니다.`);
+  // 입장 직후: 지금까지 그려진 내용을 새 클라이언트에게 재생 (중간 입장자도 전부 봄)
+  protected onJoined(state: SketchPicState, client: Socket): void {
+    for (const batch of state.strokes) {
+      client.emit('draw:stroke', batch);
     }
+  }
 
-    // DB 참가자 정리 (호스트 위임 / 빈 방 삭제)는 유예 후 실행한다.
-    // 일시적 단절(새로고침·재시작·네트워크)로 방이 즉시 삭제되는 것을 막고,
-    // 재접속 시 handleConnection에서 취소한다.
-    this.scheduleLeave(data.roomId, player);
-
-    if (state.players.size === 0) {
-      this.gameState.delete(data.roomId);
-      return;
-    }
-
-    if (state.phase === 'LOBBY') {
-      if (state.players.size < 2) {
-        if (state.startTimer) {
-          clearTimeout(state.startTimer);
-          state.startTimer = null;
-          state.startAt = null;
-        }
-      } else {
-        this.scheduleStart(state);
-      }
-    }
-
-    // 호스트 이탈 → 다음 사람에게 위임 (인메모리)
-    if (wasHost) {
-      state.hostKey = state.turnOrder[0] ?? null;
-    }
-
+  // (유예 후) 실제 퇴장 처리
+  protected onPlayerLeft(state: SketchPicState, key: string): void {
+    state.turnOrder = state.turnOrder.filter((k) => k !== key);
     if (state.phase !== 'LOBBY' && state.players.size < 2) {
       void this.stopGame(state, 'not_enough_players');
     } else if (
-      wasDrawer &&
+      state.currentDrawerKey === key &&
       (state.phase === 'DRAWING' || state.phase === 'WORD_SELECT')
     ) {
       void this.endTurn(state, 'drawer_left');
     } else {
       this.emitLobby(state);
     }
+  }
+
+  // 채팅 후처리: 출제자가 아니고 아직 못 맞힌 사람이 정답을 맞혔는지 판정
+  protected onChat(
+    state: SketchPicState,
+    player: BasePlayer,
+    text: string,
+  ): void {
+    const isCorrect =
+      state.phase === 'DRAWING' &&
+      player.key !== state.currentDrawerKey &&
+      !state.solved.has(player.key) &&
+      !!state.word &&
+      this.normalize(text) === this.normalize(state.word);
+    if (isCorrect) this.handleCorrect(state, player);
   }
 
   // ===== 호스트 제어 =====
@@ -256,6 +169,7 @@ export class SketchPicGateway
     const state = this.stateOf(client);
     if (!state || state.phase !== 'DRAWING') return;
     if (this.keyOf(client) !== state.currentDrawerKey) return;
+    state.strokes.push(body); // 중간 입장자 재생용으로 누적 저장
     client.to(state.roomId).emit('draw:stroke', body);
   }
 
@@ -264,52 +178,13 @@ export class SketchPicGateway
     const state = this.stateOf(client);
     if (!state || state.phase !== 'DRAWING') return;
     if (this.keyOf(client) !== state.currentDrawerKey) return;
+    state.strokes = []; // 전체 지우기 → 누적 그림도 비움
     client.to(state.roomId).emit('draw:clear');
-  }
-
-  // ===== 채팅 / 정답 =====
-
-  @SubscribeMessage('chat:send')
-  onChat(
-    @ConnectedSocket() client: Socket,
-    @MessageBody() body: { text?: string },
-  ): void {
-    const state = this.stateOf(client);
-    if (!state) return;
-    const key = this.keyOf(client);
-    const player = state.players.get(key);
-    if (!player) return;
-
-    const text = String(body?.text ?? '').slice(0, MAX_CHAT_LEN);
-    if (!text.trim()) return;
-
-    // 맞히는 사람(출제자 아님, 아직 못 맞힘)이 정답을 맞혔는지.
-    // 출제자는 정답을 입력해도 정답 처리되지 않는다.
-    const isCorrect =
-      state.phase === 'DRAWING' &&
-      key !== state.currentDrawerKey &&
-      !state.solved.has(key) &&
-      !!state.word &&
-      this.normalize(text) === this.normalize(state.word);
-
-    // 모든 채팅은 방 전체에 그대로 방송한다 (출제자/정답 포함).
-    this.server.to(state.roomId).emit('chat:message', {
-      senderId: key,
-      nickname: player.nickname,
-      text,
-      ts: Date.now(),
-    });
-
-    // 정답이면 점수/턴 처리.
-    if (isCorrect) {
-      this.handleCorrect(state, player);
-    }
   }
 
   // ===== 게임 흐름 =====
 
   private async startGame(state: SketchPicState): Promise<void> {
-    console.debug('[sketch-pic] startGame:', state.roomId);
     this.gameState.clearTimers(state);
     state.turnOrder = [...state.players.keys()];
     state.currentDrawerKey = null;
@@ -324,12 +199,6 @@ export class SketchPicGateway
   }
 
   private async beginTurn(state: SketchPicState): Promise<void> {
-    console.debug(
-      '[sketch-pic] beginTurn:',
-      state.roomId,
-      'players=',
-      state.players.size,
-    );
     this.gameState.clearTimers(state);
     if (state.players.size < 2)
       return this.stopGame(state, 'not_enough_players');
@@ -339,6 +208,7 @@ export class SketchPicGateway
     state.word = null;
     state.solved = new Set();
     state.turnScores = new Map();
+    state.strokes = []; // 새 턴 → 캔버스 초기화(클라도 출제자 변경 시 clear)
 
     const choices = await this.service.pickWordChoices(state.usedWordIds, 3);
     if (choices.length === 0) {
@@ -361,10 +231,6 @@ export class SketchPicGateway
       drawerId: state.currentDrawerKey,
       turnCount: state.turnCount + 1,
       endsAt: Date.now() + SELECT_TIMEOUT_MS,
-    });
-    console.debug('[sketch-pic] emitted turn:choosing', {
-      roomId: state.roomId,
-      drawer: state.currentDrawerKey,
     });
 
     state.selectTimer = setTimeout(() => {
@@ -411,7 +277,7 @@ export class SketchPicGateway
     const gain = base + bonus;
 
     state.solved.add(player.key);
-    this.gameState.addScore(state, player.key, gain); // 맞힌 사람만 가점 (출제자 보너스 없음)
+    this.gameState.addScore(state, player.key, gain); // 맞힌 사람만 가점
 
     this.server.to(state.roomId).emit('guess:correct', {
       playerId: player.key,
@@ -425,7 +291,6 @@ export class SketchPicGateway
 
   private async endTurn(state: SketchPicState, reason: string): Promise<void> {
     if (state.phase === 'REVEAL') return; // 중복 방지
-    console.debug('[sketch-pic] endTurn:', state.roomId, 'reason=', reason);
     this.gameState.clearTimers(state);
     const word = state.word;
     state.phase = 'REVEAL';
@@ -459,10 +324,6 @@ export class SketchPicGateway
     } else if (word) {
       this.emitSystemChat(state, `정답은 "${word}" 입니다.`);
     }
-    console.debug('[sketch-pic] emitted turn:reveal', {
-      roomId: state.roomId,
-      reason,
-    });
 
     // 대기 없이 곧바로 다음 턴(다음 출제자 단어 선택)으로 넘어간다.
     void this.beginTurn(state);
@@ -476,96 +337,13 @@ export class SketchPicGateway
     state.wordChoices = [];
     state.solved = new Set();
     state.turnScores = new Map();
+    state.strokes = [];
     await this.service.setRoomStatus(state.roomId, RoomStatus.WAITING);
     this.server.to(state.roomId).emit('game:stopped', { reason });
     this.emitLobby(state);
   }
 
   // ===== 헬퍼 =====
-
-  private resolveIdentity(auth: Record<string, string>): {
-    type: PlayerType;
-    id: string;
-  } {
-    if (auth.token) {
-      const payload = this.jwt.verify<JwtPayload>(auth.token, {
-        secret: process.env.JWT_ACCESS_SECRET ?? 'dev-access-secret',
-      });
-      return { type: 'user', id: payload.sub };
-    }
-    if (auth.guestId) {
-      return { type: 'guest', id: auth.guestId };
-    }
-    throw new Error('인증 정보(token 또는 guestId)가 필요합니다');
-  }
-
-  private toIdentity(player: Player): Identity {
-    return player.type === 'user'
-      ? { type: 'user', id: player.id, role: UserRole.USER }
-      : { type: 'guest', id: player.id };
-  }
-
-  // 끊긴 참가자의 DB 정리를 유예 후 실행한다 (재접속하면 cancelLeave로 취소).
-  // REST join 없이 소켓만 붙은 경우 참가 기록이 없어 NotFound → 무시.
-  private scheduleLeave(roomId: string, player: Player): void {
-    const id = `${roomId}:${player.key}`;
-    const existing = this.leaveTimers.get(id);
-    if (existing) clearTimeout(existing);
-    const timer = setTimeout(() => {
-      this.leaveTimers.delete(id);
-      void this.rooms
-        .leave(roomId, this.toIdentity(player))
-        .catch(() => undefined);
-    }, LEAVE_GRACE_MS);
-    this.leaveTimers.set(id, timer);
-  }
-
-  private cancelLeave(roomId: string, key: string): void {
-    const id = `${roomId}:${key}`;
-    const timer = this.leaveTimers.get(id);
-    if (timer) {
-      clearTimeout(timer);
-      this.leaveTimers.delete(id);
-    }
-  }
-
-  private stateOf(client: Socket): SketchPicState | undefined {
-    const data = client.data as SocketData | undefined;
-    return data?.roomId ? this.gameState.get(data.roomId) : undefined;
-  }
-
-  private keyOf(client: Socket): string {
-    return (client.data as SocketData).key;
-  }
-
-  private emitLobby(state: SketchPicState): void {
-    this.server
-      .to(state.roomId)
-      .emit('lobby:state', this.gameState.lobbySnapshot(state));
-  }
-
-  // 진행 안내(그림 시작/정답/정답 공개)를 채팅 로그에 시스템 메시지로 남긴다.
-  private emitSystemChat(state: SketchPicState, text: string): void {
-    this.server.to(state.roomId).emit('chat:system', { text, ts: Date.now() });
-  }
-
-  private err(client: Socket, code: string, message: string): void {
-    client.emit('error', { code, message });
-  }
-
-  private scheduleStart(state: SketchPicState): void {
-    if (state.startTimer) return;
-    state.startAt = Date.now() + START_DELAY_MS;
-    this.server
-      .to(state.roomId)
-      .emit('game:starting', { startsAt: state.startAt });
-    state.startTimer = setTimeout(async () => {
-      state.startTimer = null;
-      state.startAt = null;
-      if (state.phase !== 'LOBBY' || state.players.size < 2) return;
-      await this.startGame(state);
-    }, START_DELAY_MS);
-  }
 
   private normalize(text: string): string {
     return text.trim().toLowerCase().replace(/\s+/g, '');

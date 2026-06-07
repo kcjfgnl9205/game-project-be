@@ -1,157 +1,92 @@
 import {
   ConnectedSocket,
   MessageBody,
-  OnGatewayConnection,
-  OnGatewayDisconnect,
   SubscribeMessage,
   WebSocketGateway,
-  WebSocketServer,
 } from '@nestjs/websockets';
 import { JwtService } from '@nestjs/jwt';
-import { RoomStatus, UserRole } from '@prisma/client';
-import type { Server, Socket } from 'socket.io';
+import { RoomStatus } from '@prisma/client';
+import type { Socket } from 'socket.io';
 import { RoomsService } from '../rooms/rooms.service';
-import type { Identity } from '../auth/decorators/identity.decorator';
+import { BaseGameGateway, identityKey } from '../game-common/base-game.gateway';
 import {
   WhoDrewState,
   WhoDrewStateService,
-  identityKey,
   Player,
-  PlayerType,
 } from './who-drew-state.service';
 import { WhoDrewService } from './who-drew.service';
 
 const MIN_PLAYERS = 4; // 마피아 1 + 일반인 ≥3
 const VOTE_TIME_MS = 30_000;
-const MAX_CHAT_LEN = 200;
-const LEAVE_GRACE_MS = 30_000; // 소켓 끊김 후 DB 정리 유예 (재접속 시 취소)
-
-interface SocketData {
-  roomId: string;
-  key: string;
-}
-
-interface JwtPayload {
-  sub: string;
-  role: UserRole;
-}
 
 @WebSocketGateway({
   namespace: '/who-drew',
   cors: { origin: true, credentials: true }, // TODO(prod): CORS_ORIGINS로 제한
 })
-export class WhoDrewGateway
-  implements OnGatewayConnection, OnGatewayDisconnect
-{
-  @WebSocketServer() server!: Server;
-
-  private readonly leaveTimers = new Map<string, NodeJS.Timeout>();
-
+export class WhoDrewGateway extends BaseGameGateway<WhoDrewState> {
   constructor(
     private readonly gameState: WhoDrewStateService,
     private readonly service: WhoDrewService,
-    private readonly rooms: RoomsService,
-    private readonly jwt: JwtService,
-  ) {}
+    rooms: RoomsService,
+    jwt: JwtService,
+  ) {
+    super(rooms, jwt);
+  }
 
-  // ===== 연결 / 해제 =====
+  // ===== 베이스 추상 구현 =====
 
-  async handleConnection(client: Socket): Promise<void> {
-    try {
-      const auth = (client.handshake.auth ?? {}) as Record<string, string>;
-      const roomId = auth.roomId;
-      if (!roomId) throw new Error('roomId가 필요합니다');
+  protected async loadState(roomId: string): Promise<WhoDrewState> {
+    let room = await this.service.getRoomContext(roomId);
+    for (let i = 0; i < 3 && !room; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      room = await this.service.getRoomContext(roomId);
+    }
+    if (!room) throw new Error('방을 찾을 수 없습니다');
 
-      const { type, id } = this.resolveIdentity(auth);
+    const hostKey = room.hostUserId
+      ? identityKey('user', room.hostUserId)
+      : room.hostGuestId
+        ? identityKey('guest', room.hostGuestId)
+        : null;
 
-      let room = await this.service.getRoomContext(roomId);
-      for (let i = 0; i < 3 && !room; i++) {
-        await new Promise((r) => setTimeout(r, 100));
-        room = await this.service.getRoomContext(roomId);
-      }
-      if (!room) throw new Error('방을 찾을 수 없습니다');
+    const cfg = room.whoDrewConfig;
+    return this.gameState.getOrCreate(
+      roomId,
+      { rounds: cfg?.rounds ?? 5, turnTimeSec: cfg?.turnTimeSec ?? 20 },
+      hostKey,
+    );
+  }
 
-      const hostKey = room.hostUserId
-        ? identityKey('user', room.hostUserId)
-        : room.hostGuestId
-          ? identityKey('guest', room.hostGuestId)
-          : null;
+  protected getState(roomId: string): WhoDrewState | undefined {
+    return this.gameState.get(roomId);
+  }
 
-      const cfg = room.whoDrewConfig;
-      const state = this.gameState.getOrCreate(
-        roomId,
-        {
-          rounds: cfg?.rounds ?? 5,
-          turnTimeSec: cfg?.turnTimeSec ?? 20,
-        },
-        hostKey,
-      );
+  protected deleteState(roomId: string): void {
+    this.gameState.delete(roomId);
+  }
 
-      const key = identityKey(type, id);
-      this.cancelLeave(roomId, key);
-      const player: Player = {
-        key,
-        type,
-        id,
-        nickname: (auth.nickname ?? '').trim() || '플레이어',
-        socketId: client.id,
-      };
-      const isReconnect = state.players.has(key);
-      state.players.set(key, player);
+  protected snapshot(state: WhoDrewState): unknown {
+    return this.gameState.lobbySnapshot(state);
+  }
 
-      (client.data as SocketData) = { roomId, key };
-      await client.join(roomId);
-
-      if (!isReconnect) {
-        this.emitSystemChat(state, `${player.nickname}님이 입장했습니다.`);
-      }
-
-      // 진행 중이면 공유 캔버스 히스토리 + (참가자였다면) 역할/단어를 재전송한다.
-      if (state.phase !== 'LOBBY') {
-        client.emit('draw:history', { strokes: state.strokes });
-        if (state.turnOrder.includes(key)) {
-          this.emitRole(state, client, key);
-        }
-      }
-
-      this.emitLobby(state);
-    } catch (e) {
-      client.emit('error', {
-        code: 'CONNECT_FAILED',
-        message: e instanceof Error ? e.message : '연결 실패',
-      });
-      client.disconnect(true);
+  // 입장 직후: 진행 중이면 공유 캔버스 히스토리 + (참가자였다면) 역할/단어 재전송
+  protected onJoined(state: WhoDrewState, client: Socket, key: string): void {
+    if (state.phase !== 'LOBBY') {
+      client.emit('draw:history', { strokes: state.strokes });
+      if (state.turnOrder.includes(key)) this.emitRole(state, client, key);
     }
   }
 
-  handleDisconnect(client: Socket): void {
-    const data = client.data as SocketData | undefined;
-    if (!data?.roomId) return;
-    const state = this.gameState.get(data.roomId);
-    if (!state) return;
-
-    const player = state.players.get(data.key);
-    if (!player || player.socketId !== client.id) return; // 재연결로 교체된 stale 소켓
-
-    const wasHost = state.hostKey === data.key;
-    const wasCurrentTurn =
-      state.phase === 'DRAWING' &&
-      this.gameState.currentTurnKey(state) === data.key;
-
-    state.players.delete(data.key);
-    if (state.players.size > 0) {
-      this.emitSystemChat(state, `${player.nickname}님이 나갔습니다.`);
-    }
-    this.scheduleLeave(data.roomId, player);
-
-    if (state.players.size === 0) {
-      this.gameState.delete(data.roomId);
+  // (유예 후) 실제 퇴장 처리
+  protected onPlayerLeft(state: WhoDrewState, key: string): void {
+    // 마피아가 진행 중 나가면 게임 성립 불가 → 즉시 라운드 종료 + 시민 승리
+    if (
+      state.mafiaKey === key &&
+      (state.phase === 'DRAWING' || state.phase === 'VOTE')
+    ) {
+      void this.endRoundMafiaLeft(state);
       return;
     }
-
-    if (wasHost) state.hostKey = [...state.players.keys()][0] ?? null;
-
-    // 진행 중 인원이 너무 줄면 중단
     const activePlaying = state.turnOrder.filter((k) =>
       state.players.has(k),
     ).length;
@@ -159,14 +94,11 @@ export class WhoDrewGateway
       void this.stopGame(state, 'not_enough_players');
       return;
     }
-
-    if (wasCurrentTurn) {
-      this.advanceTurn(state); // 차례인 사람이 나가면 다음으로
-    } else if (state.phase === 'VOTE') {
-      this.maybeFinishVote(state);
-    } else {
-      this.emitLobby(state);
-    }
+    const wasCurrentTurn =
+      state.phase === 'DRAWING' && this.gameState.currentTurnKey(state) === key;
+    if (wasCurrentTurn) this.advanceTurn(state);
+    else if (state.phase === 'VOTE') this.maybeFinishVote(state);
+    else this.emitLobby(state);
   }
 
   // ===== 호스트 제어 =====
@@ -214,6 +146,20 @@ export class WhoDrewGateway
     this.advanceTurn(state); // 1획 그리면 자동으로 다음 차례
   }
 
+  // 그리는 도중 실시간 중계 (저장/턴 넘김 없음 — 다른 사람 화면에만 미리보기).
+  // commit(draw:stroke) 시 전체 획을 다시 보내므로 동일 픽셀이 덧그려져도 무방.
+  @SubscribeMessage('draw:live')
+  onLive(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() body: { seg?: unknown },
+  ): void {
+    const state = this.stateOf(client);
+    if (!state || state.phase !== 'DRAWING') return;
+    const key = this.keyOf(client);
+    if (key !== this.gameState.currentTurnKey(state)) return; // 자기 차례 아님
+    client.to(state.roomId).emit('draw:stroke', { by: key, seg: body?.seg });
+  }
+
   // ===== 투표 =====
 
   @SubscribeMessage('vote:cast')
@@ -234,28 +180,6 @@ export class WhoDrewGateway
       total: this.eligibleVoters(state).length,
     });
     this.maybeFinishVote(state);
-  }
-
-  // ===== 채팅 =====
-
-  @SubscribeMessage('chat:send')
-  onChat(
-    @ConnectedSocket() client: Socket,
-    @MessageBody() body: { text?: string },
-  ): void {
-    const state = this.stateOf(client);
-    if (!state) return;
-    const key = this.keyOf(client);
-    const player = state.players.get(key);
-    if (!player) return;
-    const text = String(body?.text ?? '').slice(0, MAX_CHAT_LEN);
-    if (!text.trim()) return;
-    this.server.to(state.roomId).emit('chat:message', {
-      senderId: key,
-      nickname: player.nickname,
-      text,
-      ts: Date.now(),
-    });
   }
 
   // ===== 게임 흐름 =====
@@ -416,6 +340,23 @@ export class WhoDrewGateway
     this.emitLobby(state);
   }
 
+  // 마피아 이탈로 라운드를 종료한다 (남은 시민 승리 처리).
+  private async endRoundMafiaLeft(state: WhoDrewState): Promise<void> {
+    this.gameState.clearTimers(state);
+    state.phase = 'RESULT';
+    await this.service.setRoomStatus(state.roomId, RoomStatus.WAITING);
+    this.emitSystemChat(state, '마피아가 나가 시민 승리로 종료되었습니다.');
+    this.server.to(state.roomId).emit('game:result', {
+      mafiaKey: state.mafiaKey,
+      civilianWord: state.civilianWord,
+      mafiaWord: state.mafiaWord,
+      accusedKeys: [],
+      votes: {},
+      winner: 'CIVILIAN',
+    });
+    this.emitLobby(state);
+  }
+
   private async stopGame(state: WhoDrewState, reason: string): Promise<void> {
     this.gameState.clearTimers(state);
     state.phase = 'LOBBY';
@@ -451,70 +392,5 @@ export class WhoDrewGateway
       [arr[i], arr[j]] = [arr[j], arr[i]];
     }
     return arr;
-  }
-
-  private resolveIdentity(auth: Record<string, string>): {
-    type: PlayerType;
-    id: string;
-  } {
-    if (auth.token) {
-      const payload = this.jwt.verify<JwtPayload>(auth.token, {
-        secret: process.env.JWT_ACCESS_SECRET ?? 'dev-access-secret',
-      });
-      return { type: 'user', id: payload.sub };
-    }
-    if (auth.guestId) return { type: 'guest', id: auth.guestId };
-    throw new Error('인증 정보(token 또는 guestId)가 필요합니다');
-  }
-
-  private toIdentity(player: Player): Identity {
-    return player.type === 'user'
-      ? { type: 'user', id: player.id, role: UserRole.USER }
-      : { type: 'guest', id: player.id };
-  }
-
-  private scheduleLeave(roomId: string, player: Player): void {
-    const id = `${roomId}:${player.key}`;
-    const existing = this.leaveTimers.get(id);
-    if (existing) clearTimeout(existing);
-    const timer = setTimeout(() => {
-      this.leaveTimers.delete(id);
-      void this.rooms
-        .leave(roomId, this.toIdentity(player))
-        .catch(() => undefined);
-    }, LEAVE_GRACE_MS);
-    this.leaveTimers.set(id, timer);
-  }
-
-  private cancelLeave(roomId: string, key: string): void {
-    const id = `${roomId}:${key}`;
-    const timer = this.leaveTimers.get(id);
-    if (timer) {
-      clearTimeout(timer);
-      this.leaveTimers.delete(id);
-    }
-  }
-
-  private stateOf(client: Socket): WhoDrewState | undefined {
-    const data = client.data as SocketData | undefined;
-    return data?.roomId ? this.gameState.get(data.roomId) : undefined;
-  }
-
-  private keyOf(client: Socket): string {
-    return (client.data as SocketData).key;
-  }
-
-  private emitLobby(state: WhoDrewState): void {
-    this.server
-      .to(state.roomId)
-      .emit('lobby:state', this.gameState.lobbySnapshot(state));
-  }
-
-  private emitSystemChat(state: WhoDrewState, text: string): void {
-    this.server.to(state.roomId).emit('chat:system', { text, ts: Date.now() });
-  }
-
-  private err(client: Socket, code: string, message: string): void {
-    client.emit('error', { code, message });
   }
 }

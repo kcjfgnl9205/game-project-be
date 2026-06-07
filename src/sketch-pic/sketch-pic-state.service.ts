@@ -31,6 +31,7 @@ export interface SketchPicState {
   currentDrawerKey: string | null;
 
   wordChoices: WordChoice[]; // 출제자에게 제시한 후보
+  strokes: unknown[]; // 이번 턴 누적 그리기(프레임 배치들). 중간 입장자에게 재생용
   word: string | null; // 선택된 출제어
   turnCount: number; // 몇 문제째 (연속 플레이)
   usedWordIds: Set<string>; // 이번 세션에 이미 쓴 단어
@@ -79,6 +80,7 @@ export class SketchPicStateService {
         turnOrder: [],
         currentDrawerKey: null,
         wordChoices: [],
+        strokes: [],
         word: null,
         turnCount: 0,
         usedWordIds: new Set(),
