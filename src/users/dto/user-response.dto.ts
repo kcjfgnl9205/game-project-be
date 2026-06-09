@@ -1,6 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { AuthProvider, UserRole } from '@prisma/client';
-import { PaginatedResponseMeta } from '../../common/dto/paginated-response.dto';
 
 export class UserResponseDto {
   @ApiProperty()
@@ -25,7 +24,10 @@ export class UserResponseDto {
   updatedAt!: Date;
 }
 
-export class UserListResponseDto extends PaginatedResponseMeta {
+export class UserListResponseDto {
+  @ApiProperty({ example: 42 })
+  total!: number;
+
   @ApiProperty({ type: [UserResponseDto] })
   items!: UserResponseDto[];
 }

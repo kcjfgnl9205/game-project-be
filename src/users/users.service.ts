@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { PaginationQueryDto } from '../common/dto/pagination.dto';
 import { UserListResponseDto, UserResponseDto } from './dto/user-response.dto';
+import { PlayerStatResponseDto } from './dto/player-stat-response.dto';
 
 const USER_PUBLIC_SELECT = {
   id: true,
@@ -41,6 +42,30 @@ export class UsersService {
       }),
       this.prisma.user.count({ where: { deletedAt: null } }),
     ]);
-    return { items, total, page, limit };
+    return { items, total };
+  }
+
+  async getMyStats(userId: string): Promise<PlayerStatResponseDto> {
+    const stat = await this.prisma.sketchPicStat.findUnique({
+      where: { userId },
+    });
+
+    if (!stat) {
+      return {
+        playCount: 0,
+        totalScore: 0,
+        drawCount: 0,
+        correctCount: 0,
+        lastPlayedAt: null,
+      };
+    }
+
+    return {
+      playCount: stat.playCount,
+      totalScore: stat.totalScore,
+      drawCount: stat.drawCount,
+      correctCount: stat.correctCount,
+      lastPlayedAt: stat.lastPlayedAt,
+    };
   }
 }

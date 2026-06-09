@@ -1,0 +1,43 @@
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  IsBoolean,
+  IsInt,
+  IsObject,
+  IsOptional,
+  IsString,
+  Length,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
+
+export class UpdateRoomDto {
+  @ApiPropertyOptional({ maxLength: 50 })
+  @IsOptional()
+  @IsString()
+  @Length(1, 50)
+  name?: string;
+
+  @ApiPropertyOptional({ minimum: 2, maximum: 10 })
+  @IsOptional()
+  @IsInt()
+  @Min(2)
+  @Max(10)
+  maxPlayers?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isPrivate?: boolean;
+
+  @ApiPropertyOptional({ maxLength: 20 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  password?: string;
+
+  @ApiPropertyOptional({ type: Object, description: '게임별 설정 (부분 수정)' })
+  @IsOptional()
+  @IsObject()
+  config?: Record<string, unknown>;
+}

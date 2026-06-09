@@ -31,7 +31,7 @@ export class NoticesService {
       }),
       this.prisma.notice.count({ where: { deletedAt: null } }),
     ]);
-    return { items, total, page, limit };
+    return { items, total };
   }
 
   async findOne(id: string): Promise<NoticeResponseDto> {

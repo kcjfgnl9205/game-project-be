@@ -1,11 +1,16 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
-import { ExtractJwt, Strategy } from 'passport-jwt';
+import { Strategy } from 'passport-jwt';
 import type { Request } from 'express';
 
 export interface RefreshJwtPayload {
   sub: string;
 }
+
+const refreshTokenExtractor = (req: Request): string | null => {
+  const cookies = req.cookies as Record<string, string> | undefined;
+  return cookies?.refreshToken ?? null;
+};
 
 @Injectable()
 export class JwtRefreshStrategy extends PassportStrategy(
@@ -14,7 +19,7 @@ export class JwtRefreshStrategy extends PassportStrategy(
 ) {
   constructor() {
     super({
-      jwtFromRequest: ExtractJwt.fromBodyField('refreshToken'),
+      jwtFromRequest: refreshTokenExtractor,
       ignoreExpiration: false,
       secretOrKey: process.env.JWT_REFRESH_SECRET ?? 'dev-refresh-secret',
       passReqToCallback: true,
@@ -22,8 +27,7 @@ export class JwtRefreshStrategy extends PassportStrategy(
   }
 
   validate(req: Request, payload: RefreshJwtPayload) {
-    const body = req.body as { refreshToken?: string } | undefined;
-    const refreshToken = body?.refreshToken;
+    const refreshToken = refreshTokenExtractor(req);
     if (!refreshToken) {
       throw new UnauthorizedException('refreshToken 누락');
     }
