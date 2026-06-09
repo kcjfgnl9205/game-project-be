@@ -1,8 +1,11 @@
 name: Deploy to Oracle VM
 
+# develop → 개발 스택(~/game-project-be-dev, .env=dev, app:3001)
+# main    → 운영 스택(~/game-project-be-prod, .env=prod, app:3000)
+# 두 스택은 같은 VM에서 COMPOSE_PROJECT_NAME/포트/볼륨이 분리돼 동시에 동작한다.
 on:
   push:
-    branches: [develop]
+    branches: [develop, main]
   workflow_dispatch:
 
 jobs:
@@ -11,12 +14,23 @@ jobs:
     steps:
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          BRANCH: ${{ github.ref_name }}
         with:
           host: ${{ secrets.ORACLE_HOST }}
           username: ${{ secrets.ORACLE_USER }}
           key: ${{ secrets.ORACLE_SSH_KEY }}
+          envs: BRANCH
           script: |
-            cd ~/game-project-be
-            git pull origin develop
+            set -e
+            if [ "$BRANCH" = "main" ]; then
+              DIR=~/game-project-be-prod
+            else
+              DIR=~/game-project-be-dev
+            fi
+            # 분리된 디렉터리가 아직 없으면 기존 단일 디렉터리로 폴백 (마이그레이션 안전장치)
+            [ -d "$DIR" ] || DIR=~/game-project-be
+            cd "$DIR"
+            git pull origin "$BRANCH"
             docker compose -f docker-compose.prod.yml --env-file .env up -d --build
             docker image prune -f

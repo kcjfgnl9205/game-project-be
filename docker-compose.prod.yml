@@ -13,7 +13,8 @@ services:
       - "127.0.0.1:${MYSQL_PORT:-3306}:3306"
     volumes:
       - db_data:/var/lib/mysql
-    mem_limit: 2g
+    # 환경별 조정: 운영 3g / 개발 1.5g (VM 24GB 기준). .env에서 DB_MEM_LIMIT로 지정.
+    mem_limit: ${DB_MEM_LIMIT:-2g}
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD}"]
       interval: 10s
@@ -40,7 +41,7 @@ services:
       JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
     ports:
       - "127.0.0.1:${APP_PORT:-3000}:3000"
-    mem_limit: 1g
+    mem_limit: ${APP_MEM_LIMIT:-1g}
 
 volumes:
   db_data:
