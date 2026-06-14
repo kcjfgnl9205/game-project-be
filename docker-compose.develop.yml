@@ -39,7 +39,7 @@ services:
     environment:
       DATABASE_URL: mysql://nest:nestpassword@db:3306/game_project
       PORT: 3000
-      CORS_ORIGINS: http://localhost:5173,http://localhost:3001,http://localhost:5174,https://local.puzmu.com:5173,https://local.puzmu.com:5174
+      CORS_ORIGINS: http://localhost:5173,http://localhost:3001,http://localhost:5174,https://local.nolmoa.com:5173,https://local.nolmoa.com:5174
       JWT_ACCESS_SECRET: dev-access-secret
       JWT_REFRESH_SECRET: dev-refresh-secret
       JWT_ACCESS_EXPIRES_IN: 15m
