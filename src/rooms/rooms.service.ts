@@ -17,6 +17,7 @@ import {
   RoomListResponseDto,
   RoomResponseDto,
 } from './dto/room-response.dto';
+import { RoomStatDto } from './dto/room-stats-response.dto';
 import {
   allConfigIncludes,
   getGameHandler,
@@ -63,6 +64,29 @@ export class RoomsService {
       total,
       items: rooms.map((r) => this.toResponse(r, r._count.participants)),
     };
+  }
+
+  // 게임별 방 현황(대기/게임중) 카운트. 게임목록의 "게임중 N개" 표시용.
+  // groupBy 한 번으로 (gameType, status)별 개수를 집계한다. @@index([gameType, status]) 사용.
+  async getStats(): Promise<RoomStatDto[]> {
+    const grouped = await this.prisma.room.groupBy({
+      by: ['gameType', 'status'],
+      _count: { _all: true },
+    });
+    // 방이 0개인 게임도 0으로 노출하기 위해 모든 gameType을 기본값으로 채운다.
+    const byType = new Map<GameType, RoomStatDto>(
+      Object.values(GameType).map((gameType) => [
+        gameType,
+        { gameType, waiting: 0, inGame: 0 },
+      ]),
+    );
+    for (const row of grouped) {
+      const stat = byType.get(row.gameType);
+      if (!stat) continue;
+      if (row.status === RoomStatus.IN_GAME) stat.inGame = row._count._all;
+      else stat.waiting = row._count._all;
+    }
+    return [...byType.values()];
   }
 
   async findOne(id: string): Promise<RoomDetailResponseDto> {
