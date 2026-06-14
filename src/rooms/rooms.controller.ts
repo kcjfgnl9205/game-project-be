@@ -30,6 +30,7 @@ import {
   RoomDetailResponseDto,
   RoomListResponseDto,
 } from './dto/room-response.dto';
+import { RoomStatDto } from './dto/room-stats-response.dto';
 
 @ApiTags('rooms')
 @Controller('rooms')
@@ -41,6 +42,14 @@ export class RoomsController {
   @ApiOkResponse({ type: RoomListResponseDto })
   list(@Query() query: RoomListQueryDto): Promise<RoomListResponseDto> {
     return this.rooms.list(query);
+  }
+
+  // 게임별 방 현황(대기/게임중). ':id'보다 먼저 선언해야 'stats'가 id로 매칭되지 않는다.
+  @Public()
+  @Get('stats')
+  @ApiOkResponse({ type: RoomStatDto, isArray: true })
+  stats(): Promise<RoomStatDto[]> {
+    return this.rooms.getStats();
   }
 
   @Public()
