@@ -1,6 +1,12 @@
 /**
  * 우리말샘 JSON → WordChainWord 대량 import.
  *
+ * [데이터 출처/라이선스]
+ *   국립국어원 우리말샘 (https://opendict.korean.go.kr)
+ *   CC BY-SA 2.0 KR (https://creativecommons.org/licenses/by-sa/2.0/kr/)
+ *   - 저작자표시: 출처(우리말샘)와 라이선스를 서비스/배포물에 표기할 것.
+ *   - 동일조건변경허락: 이 데이터를 가공해 재배포할 경우 동일 라이선스로 공개할 것.
+ *
  * 실행 예:
  *   DATABASE_URL="mysql://nest:비번@127.0.0.1:3306/game_project" \
  *     npx tsx scripts/import-word-chain.ts ./data

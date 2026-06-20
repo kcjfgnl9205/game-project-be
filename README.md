@@ -96,3 +96,12 @@ Nest is an MIT-licensed open source project. It can grow thanks to the sponsors 
 ## License
 
 Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+
+## 데이터 출처 / Data attribution
+
+끝말잇기(Word Chain) 게임의 단어 및 뜻풀이는 국립국어원 **우리말샘**의 자료를 사용합니다.
+
+- 출처: 국립국어원 우리말샘 (https://opendict.korean.go.kr)
+- 라이선스: [CC BY-SA 2.0 KR](https://creativecommons.org/licenses/by-sa/2.0/kr/)
+
+본 자료는 CC BY-SA 2.0 KR(저작자표시-동일조건변경허락)로 제공됩니다. 자료를 가공하여 재배포할 경우 동일한 라이선스로 공개해야 합니다.
