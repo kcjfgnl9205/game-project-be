@@ -11,6 +11,7 @@ import { RoomsModule } from './rooms/rooms.module';
 import { AdminModule } from './admin/admin.module';
 import { SketchPicModule } from './sketch-pic/sketch-pic.module';
 import { WhoDrewModule } from './who-drew/who-drew.module';
+import { WordChainModule } from './word-chain/word-chain.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 
 @Module({
@@ -24,6 +25,7 @@ import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
     AdminModule,
     SketchPicModule,
     WhoDrewModule,
+    WordChainModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: JwtAuthGuard }],
