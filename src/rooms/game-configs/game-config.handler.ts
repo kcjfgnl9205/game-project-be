@@ -1,7 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
-import { GameType, Prisma } from '@prisma/client';
+import { GameType, Prisma, WordChainMode } from '@prisma/client';
 
 // 게임별 1:1 설정 관계가 모두 로드된 Room (응답 매핑용).
 export type RoomWithConfigs = {
@@ -10,16 +10,22 @@ export type RoomWithConfigs = {
     rounds: number;
     turnTimeSec: number;
   } | null;
+  wordChainConfig: {
+    mode: WordChainMode;
+    roundCount: number;
+    turnTimeSec: number;
+    allowKillerWord: boolean;
+  } | null;
 };
 
 // Room create/update 중 "게임별 config 관계" 부분만 (코어 공통 필드는 건드리지 않음).
 type RoomConfigCreate = Pick<
   Prisma.RoomCreateInput,
-  'sketchPicConfig' | 'whoDrewConfig'
+  'sketchPicConfig' | 'whoDrewConfig' | 'wordChainConfig'
 >;
 type RoomConfigUpdate = Pick<
   Prisma.RoomUpdateInput,
-  'sketchPicConfig' | 'whoDrewConfig'
+  'sketchPicConfig' | 'whoDrewConfig' | 'wordChainConfig'
 >;
 
 /**

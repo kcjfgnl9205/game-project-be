@@ -2,11 +2,13 @@ import { GameType, Prisma } from '@prisma/client';
 import type { GameConfigHandler } from './game-config.handler';
 import { sketchPicHandler } from './sketch-pic.handler';
 import { whoDrewHandler } from './who-drew.handler';
+import { wordChainHandler } from './word-chain.handler';
 
 // Record<GameType, ...>이므로 새 GameType이 생기면 여기서 컴파일 에러 → 누락 방지.
 const HANDLERS: Record<GameType, GameConfigHandler> = {
   [GameType.SKETCH_PIC]: sketchPicHandler,
   [GameType.WHO_DREW]: whoDrewHandler,
+  [GameType.WORD_CHAIN]: wordChainHandler,
 };
 
 export function getGameHandler(gameType: GameType): GameConfigHandler {
