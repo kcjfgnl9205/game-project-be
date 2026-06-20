@@ -63,6 +63,7 @@ model Room {
   participants    RoomParticipant[] // 참가자 목록
   sketchPicConfig SketchPicConfig? // 그림 맞추기 방이면 설정 (gameType=SKETCH_PIC)
   whoDrewConfig   WhoDrewConfig? // 그림 마피아 방이면 설정 (gameType=WHO_DREW)
+  wordChainConfig WordChainConfig? // 끝말잇기 방이면 설정 (gameType=WORD_CHAIN)
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
 
@@ -143,6 +144,31 @@ model WhoDrewWordPair {
   @@unique([civilianWord, mafiaWord]) // 같은 쌍 중복 방지
 }
 
+// 끝말잇기 방 설정 (gameType=WORD_CHAIN). 두음법칙은 항상 적용하므로 별도 필드 없음.
+model WordChainConfig {
+  roomId          String        @id // Room 1:1 (PK=FK)
+  room            Room          @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  mode            WordChainMode @default(ROUND) // 라운드제 / 토너먼트
+  roundCount      Int           @default(3) // 라운드제일 때 라운드 수 (토너먼트면 인원에서 파생, 무시)
+  turnTimeSec     Int           @default(15) // 1인당 단어 입력 제한 시간(초)
+  allowKillerWord Boolean       @default(false) // 한방단어(끝 글자로 시작하는 단어가 없는 단어) 허용 여부
+}
+
+// 끝말잇기 단어 사전 (우리말샘 명사 import). 제출 단어 검증 + 정답 시 뜻 표시용.
+model WordChainWord {
+  id         Int     @id @default(autoincrement())
+  word       String  @unique @db.VarChar(40) // 표제어 (정제된 한글)
+  firstChar  String  @db.Char(1) // 첫 글자 (봇/힌트 조회용)
+  lastChar   String  @db.Char(1) // 끝 글자
+  length     Int // 글자 수
+  pos        String  @db.VarChar(10) // 품사 (명사)
+  wordType   String? @db.VarChar(10) // 고유어/한자어/외래어
+  definition String  @db.Text // 뜻풀이 (정답 시 표시)
+  example    String? @db.Text // 예문 (선택)
+
+  @@index([firstChar])
+}
+
 // ==========================================
 // 문의 / 건의 (1:1 문의)
 // ==========================================
@@ -191,6 +217,13 @@ enum InquiryStatus {
 enum GameType {
   SKETCH_PIC // 그림 맞추기 (그림 맞히기)
   WHO_DREW // 그림 마피아 (그림 마피아)
+  WORD_CHAIN // 끝말잇기 (Word Chain)
+}
+
+// 끝말잇기 게임 방식
+enum WordChainMode {
+  ROUND // 라운드제: 정해진 라운드 동안 최다 승 우승
+  TOURNAMENT // 토너먼트: 매 라운드 패자 탈락 → 최종 1인 우승
 }
 
 // 게임 방 상태
