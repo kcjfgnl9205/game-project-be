@@ -9,9 +9,13 @@ import { RoomStatus } from '@prisma/client';
 import type { Socket } from 'socket.io';
 import { RoomsService } from '../rooms/rooms.service';
 import { BaseGameGateway, identityKey } from '../game-common/base-game.gateway';
-import { WordChainStateService, WordChainState } from './word-chain-state.service';
+import {
+  WordChainStateService,
+  WordChainState,
+} from './word-chain-state.service';
 import { WordChainService } from './word-chain.service';
 import { allowedStarts, isValidHangulWord } from './hangul';
+import { randomStartChar } from './start-chars';
 
 const MIN_PLAYERS = 2;
 const ROUND_GAP_MS = 4_000; // 라운드 사이 결과 노출 시간
@@ -93,10 +97,15 @@ export class WordChainGateway extends BaseGameGateway<WordChainState> {
     const state = this.stateOf(client);
     if (!state) return;
     const key = this.keyOf(client);
-    if (key !== state.hostKey) return this.err(client, 'NOT_HOST', '방장만 시작할 수 있습니다.');
+    if (key !== state.hostKey)
+      return this.err(client, 'NOT_HOST', '방장만 시작할 수 있습니다.');
     if (state.phase === 'PLAYING') return;
     if (state.players.size < MIN_PLAYERS)
-      return this.err(client, 'NOT_ENOUGH', `최소 ${MIN_PLAYERS}명이 필요합니다.`);
+      return this.err(
+        client,
+        'NOT_ENOUGH',
+        `최소 ${MIN_PLAYERS}명이 필요합니다.`,
+      );
 
     this.gameState.resetSession(state);
     state.order = [...state.players.keys()];
@@ -113,13 +122,20 @@ export class WordChainGateway extends BaseGameGateway<WordChainState> {
     state.alive = state.order.filter((k) => state.players.has(k));
     state.usedWords = new Set();
     state.lastWord = null;
-    state.requiredStarts = null;
     state.phase = 'PLAYING';
     void this.service.setRoomStatus(state.roomId, RoomStatus.IN_GAME);
 
+    // 첫 글자는 미리 정해둔 풀에서 무작위로 하나 제시 (DB 조회 없음)
+    const startChar = randomStartChar();
+    state.requiredStarts = [startChar];
+
     // 라운드마다 시작 플레이어 회전
-    const startKey = state.alive[(state.round - 1) % state.alive.length] ?? state.alive[0];
-    this.emitSystemChat(state, `${state.round}라운드 시작! 첫 단어를 입력하세요.`);
+    const startKey =
+      state.alive[(state.round - 1) % state.alive.length] ?? state.alive[0];
+    this.emitSystemChat(
+      state,
+      `${state.round}라운드 시작! '${startChar}'(으)로 시작하는 단어를 입력하세요.`,
+    );
     this.startTurn(state, startKey ?? null);
   }
 
@@ -138,7 +154,10 @@ export class WordChainGateway extends BaseGameGateway<WordChainState> {
     const state = this.getState(roomId);
     if (!state || state.phase !== 'PLAYING' || !state.currentKey) return;
     const p = state.players.get(state.currentKey);
-    this.emitSystemChat(state, `${p?.nickname ?? '플레이어'}님이 시간 초과로 탈락했습니다.`);
+    this.emitSystemChat(
+      state,
+      `${p?.nickname ?? '플레이어'}님이 시간 초과로 탈락했습니다.`,
+    );
     this.eliminate(state, state.currentKey, false);
   }
 
@@ -195,7 +214,10 @@ export class WordChainGateway extends BaseGameGateway<WordChainState> {
 
     if (!canContinue) {
       // 한방단어 허용 모드: 더 이어갈 수 없으므로 제출자가 라운드 승리
-      this.emitSystemChat(state, `${p?.nickname ?? '플레이어'}님의 한방단어! 라운드 승리.`);
+      this.emitSystemChat(
+        state,
+        `${p?.nickname ?? '플레이어'}님의 한방단어! 라운드 승리.`,
+      );
       this.endRound(state, key);
       return;
     }
@@ -208,9 +230,15 @@ export class WordChainGateway extends BaseGameGateway<WordChainState> {
 
   // ===== 탈락 / 라운드 종료 =====
 
-  private eliminate(state: WordChainState, key: string, leftRoom: boolean): void {
+  private eliminate(
+    state: WordChainState,
+    key: string,
+    leftRoom: boolean,
+  ): void {
     const wasCurrent = state.currentKey === key;
-    const next = wasCurrent ? this.gameState.nextAlive(state) : state.currentKey;
+    const next = wasCurrent
+      ? this.gameState.nextAlive(state)
+      : state.currentKey;
     state.alive = state.alive.filter((k) => k !== key);
 
     if (state.alive.length <= 1) {
@@ -218,7 +246,10 @@ export class WordChainGateway extends BaseGameGateway<WordChainState> {
       return;
     }
     if (wasCurrent) {
-      this.startTurn(state, state.alive.includes(next ?? '') ? next : state.alive[0]);
+      this.startTurn(
+        state,
+        state.alive.includes(next ?? '') ? next : state.alive[0],
+      );
     } else {
       this.emitLobby(state);
     }
@@ -230,8 +261,11 @@ export class WordChainGateway extends BaseGameGateway<WordChainState> {
     state.currentKey = null;
     state.turnEndsAt = null;
 
-    if (winnerKey) state.wins.set(winnerKey, (state.wins.get(winnerKey) ?? 0) + 1);
-    const winnerName = winnerKey ? state.players.get(winnerKey)?.nickname : null;
+    if (winnerKey)
+      state.wins.set(winnerKey, (state.wins.get(winnerKey) ?? 0) + 1);
+    const winnerName = winnerKey
+      ? state.players.get(winnerKey)?.nickname
+      : null;
 
     // 토너먼트: 단판 생존자 = 최종 우승
     if (state.mode === 'TOURNAMENT') {
@@ -282,9 +316,15 @@ export class WordChainGateway extends BaseGameGateway<WordChainState> {
     this.server.to(state.roomId).emit('game:end', {
       winnerKey,
       winnerName: name,
-      wins: [...state.wins.entries()].map(([k, w]) => ({ playerId: k, wins: w })),
+      wins: [...state.wins.entries()].map(([k, w]) => ({
+        playerId: k,
+        wins: w,
+      })),
     });
-    this.emitSystemChat(state, name ? `🏆 ${name}님 우승!` : '게임이 종료되었습니다.');
+    this.emitSystemChat(
+      state,
+      name ? `🏆 ${name}님 우승!` : '게임이 종료되었습니다.',
+    );
     this.emitLobby(state);
   }
 

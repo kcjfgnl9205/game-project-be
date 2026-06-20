@@ -289,6 +289,69 @@ export class RoomsService {
     ]);
   }
 
+  // 소켓 접속 == 활성 참가자로 보장 (나갔던 기록 되살리거나 없으면 생성).
+  // 방이 없으면 no-op. 게이트웨이가 접속 시 호출해 DB 멤버십과 실제 접속을 일치시킨다.
+  async ensureActive(
+    roomId: string,
+    identity: Identity,
+    nickname?: string,
+  ): Promise<void> {
+    const room = await this.prisma.room.findUnique({
+      where: { id: roomId },
+      select: { id: true },
+    });
+    if (!room) return;
+
+    const existing = await this.findAnyParticipant(roomId, identity);
+    if (existing) {
+      if (existing.leftAt !== null) {
+        await this.prisma.roomParticipant
+          .update({
+            where: { id: existing.id },
+            data: { leftAt: null, ...(nickname ? { nickname } : {}) },
+          })
+          .catch(() => undefined);
+      }
+      return;
+    }
+    await this.prisma.roomParticipant
+      .create({
+        data: {
+          roomId,
+          userId: identity.type === 'user' ? identity.id : null,
+          guestId: identity.type === 'guest' ? identity.id : null,
+          nickname: nickname?.trim() || '플레이어',
+          isHost: false,
+        },
+      })
+      .catch(() => undefined); // 동시 입장 경쟁(P2002) → 이미 활성 처리됨
+  }
+
+  // 지정한 참가자를 방장으로 위임 (인메모리 권한 위임을 DB에 반영).
+  async transferHostTo(roomId: string, identity: Identity): Promise<void> {
+    const target = await this.findParticipant(roomId, identity); // leftAt: null
+    if (!target) return;
+    await this.prisma
+      .$transaction([
+        this.prisma.roomParticipant.updateMany({
+          where: { roomId, isHost: true },
+          data: { isHost: false },
+        }),
+        this.prisma.roomParticipant.update({
+          where: { id: target.id },
+          data: { isHost: true },
+        }),
+        this.prisma.room.update({
+          where: { id: roomId },
+          data: {
+            hostUserId: identity.type === 'user' ? identity.id : null,
+            hostGuestId: identity.type === 'guest' ? identity.id : null,
+          },
+        }),
+      ])
+      .catch(() => undefined);
+  }
+
   // --- helpers ---
 
   private async assertHost(roomId: string, identity: Identity) {

@@ -129,6 +129,12 @@ export abstract class BaseGameGateway<TState extends BaseGameState>
       state.players.set(key, player);
       this.onPlayerAdded(state, player);
 
+      // 소켓 접속 == 활성 참가자로 보장 (DB 멤버십을 실제 접속과 일치).
+      // 이래야 방장이 나가도 접속 중인 다음 사람이 next로 잡혀 방이 유지된다.
+      await this.rooms
+        .ensureActive(roomId, this.toIdentity(player), player.nickname)
+        .catch(() => undefined);
+
       (client.data as SocketData) = { roomId, key };
       await client.join(roomId);
 
@@ -197,7 +203,16 @@ export abstract class BaseGameGateway<TState extends BaseGameState>
       this.deleteState(roomId);
       return;
     }
-    if (wasHost) state.hostKey = [...state.players.keys()][0] ?? null;
+    // 방장이 나가면 접속 중인 다음 사람에게 위임하고 DB에도 반영(인메모리 권한 기준).
+    if (wasHost) {
+      const nextPlayer = [...state.players.values()][0] ?? null;
+      state.hostKey = nextPlayer?.key ?? null;
+      if (nextPlayer) {
+        void this.rooms
+          .transferHostTo(roomId, this.toIdentity(nextPlayer))
+          .catch(() => undefined);
+      }
+    }
     this.onPlayerLeft(state, key, { wasHost });
   }
 
