@@ -52,6 +52,9 @@ pids
 *.seed
 *.pid.lock
 
+# 끝말잇기 단어 import 원본(우리말샘 JSON) — 대용량, 커밋 제외
+/data/
+
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
